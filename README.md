@@ -340,8 +340,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- 📧 Email: [your-email@example.com]
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/mirror-web-cli/issues)
+- 📧 Email: [sanjeevsaniel@gmail.com]
+- 🐛 Issues: [GitHub Issues](https://github.com/SanjeevSaniel/mirror-web-cli/issues)
 - 📖 Documentation: [Full docs](./docs/complete_implementation_guide.md)
 
 ---
