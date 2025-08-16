@@ -1,0 +1,44 @@
+{
+  "name": "mirror-web-cli",
+  "version": "1.0.0",
+  "description": "CLI tool to clone any website locally and make it functional offline",
+  "main": "src/cli.js",
+  "bin": {
+    "mirror-web-cli": "./src/cli.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node test/test.js",
+    "demo": "node examples/demo.js",
+    "ai-demo": "node examples/aiDemo.js"
+  },
+  "keywords": [
+    "web-scraping",
+    "website-cloning",
+    "offline",
+    "cli",
+    "mirror"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.5.0",
+    "cheerio": "^1.1.2",
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.1",
+    "fs-extra": "^11.3.1",
+    "openai": "^5.12.2",
+    "puppeteer": "^24.16.2"
+  },
+  "devDependencies": {
+    "jest": "^30.0.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SanjeevSaniel/mirror-web-cli.git"
+  }
+}

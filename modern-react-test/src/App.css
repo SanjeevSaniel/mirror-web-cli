@@ -1,0 +1,13 @@
+/* Cloned Website Styles */
+
+
+.App {
+  text-align: center;
+}
+
+/* Component Styles */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
