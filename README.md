@@ -346,4 +346,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
+## 📝 Notes on Latest Implementation
+
+- All core modules use ES6 exports (see `src/` for `export function` and `export class` usage).
+- Main classes: `TechStackCloner`, `FrameworkDetector`, `AIWebsiteAnalyzer`, `ClaudeDisplay`, `AssetOptimizer`, and utility exports in `utils.js`.
+- Singleton patterns are used for `FrameworkDetector` and `ClaudeDisplay` for easy access.
+- CLI options and environment variables are up to date with the codebase.
+- For any issues or feature requests, please use [GitHub Issues](https://github.com/SanjeevSaniel/mirror-web-cli/issues) (typo fixed from 'sissues').
+
+---
+
 ⭐ **Star this repo if you find it useful!**
