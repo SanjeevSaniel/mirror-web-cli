@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "D:\\d\\1A-Personal\\D-Learnings\\1-Projects"
+    ],
+    "allow": [
+      "Bash(rm:*)"
+    ]
+  }
+}

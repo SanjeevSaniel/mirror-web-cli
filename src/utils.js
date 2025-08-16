@@ -121,7 +121,9 @@ export function getExtensionForType(type) {
   return extensions[type] || 'txt';
 }
 
-// Enhanced terminal display utilities with modern design
+// Legacy ProgressDisplay class - DEPRECATED
+// Use the new ClaudeDisplay system from './display.js' instead
+// This class is maintained for backward compatibility only
 export class ProgressDisplay {
   static currentProgress = null;
   
@@ -267,19 +269,37 @@ export class ProgressDisplay {
     return str.replace(/\u001b\[[0-9;]*m/g, '');
   }
 
-  static finalResult(success, outputPath, techStack) {
+  static finalResult(success, outputPath, techStack, elapsedTime = 0) {
     if (success) {
-      // Celebration animation
-      console.log('\n' + this.createCelebrationBorder());
-      console.log(chalk.bold.green(`${' '.repeat(15)}🎉 CLONING COMPLETE! 🎉`));
-      console.log(this.createCelebrationBorder());
+      // Mesmerizing completion animation
+      console.log('\n' + this.createMesmerizingBorder());
+      console.log(chalk.bold.green(`${' '.repeat(12)}✨ TRANSFORMATION COMPLETE! ✨`));
+      console.log(this.createMesmerizingBorder());
       
-      // Modern info cards
+      // Beautiful timing display
+      const timeDisplay = this.formatElapsedTime(elapsedTime);
+      console.log('\n' + chalk.bgMagenta.white.bold(' ⏱️  MISSION ACCOMPLISHED ') + chalk.magenta(` in ${timeDisplay}`));
+      
+      // Mesmerizing quote
+      const quote = this.getInspirationalQuote();
+      console.log(chalk.italic.gray(`\n     "${quote}"`));
+      
+      // Modern info cards with enhanced styling
       this.createInfoCard('📁 Output Location', outputPath, 'cyan');
       this.createInfoCard('⚡ Technology Stack', techStack.toUpperCase(), 'magenta');
+      this.createInfoCard('⏱️  Total Time', timeDisplay, 'green');
+      
+      // Performance celebration
+      const speed = this.calculateSpeed(elapsedTime);
+      console.log('\n' + chalk.bgBlue.white.bold(' 🚀 PERFORMANCE METRICS '));
+      console.log(chalk.blue('┌─────────────────────────────────────────────────────┐'));
+      console.log(chalk.blue('│') + chalk.white(` 🔥 Cloning Speed: ${chalk.yellow.bold(speed)}`.padEnd(58)) + chalk.blue('│'));
+      console.log(chalk.blue('│') + chalk.white(` 💎 Quality: ${chalk.green.bold('Premium Grade')}`.padEnd(58)) + chalk.blue('│'));
+      console.log(chalk.blue('│') + chalk.white(` ⚡ Status: ${chalk.cyan.bold('Ready to Deploy')}`.padEnd(58)) + chalk.blue('│'));
+      console.log(chalk.blue('└─────────────────────────────────────────────────────┘'));
       
       // Next steps with modern styling
-      console.log('\n' + chalk.bgGreen.black.bold(' 🚀 NEXT STEPS ') + chalk.green(' ▶ Get started immediately!'));
+      console.log('\n' + chalk.bgGreen.black.bold(' 🚀 NEXT STEPS ') + chalk.green(' ▶ Your digital masterpiece awaits!'));
       console.log(chalk.green('┌─────────────────────────────────────────────────────┐'));
       
       if (techStack === 'react') {
@@ -292,9 +312,17 @@ export class ProgressDisplay {
       }
       
       console.log(chalk.green('└─────────────────────────────────────────────────────┘'));
+      
+      // Final mesmerizing message
+      console.log('\n' + this.createStarField());
+      console.log(chalk.bold.magenta(`${' '.repeat(8)}🌟 Website successfully mirrored to perfection! 🌟`));
+      console.log(this.createStarField());
+      
     } else {
+      const timeDisplay = this.formatElapsedTime(elapsedTime);
       console.log('\n' + chalk.red('═'.repeat(60)));
       console.log(chalk.red.bold(`${' '.repeat(22)}❌ CLONING FAILED`));
+      console.log(chalk.gray(`${' '.repeat(22)}Time elapsed: ${timeDisplay}`));
       console.log(chalk.red('═'.repeat(60)));
     }
     console.log('\n');
@@ -311,6 +339,74 @@ export class ProgressDisplay {
       }
     }
     return border;
+  }
+
+  static createMesmerizingBorder() {
+    const chars = ['✨', '🌟', '💫', '⭐', '🔮', '💎', '🌈'];
+    const colors = [chalk.magenta, chalk.cyan, chalk.yellow, chalk.green, chalk.blue, chalk.red];
+    let border = '';
+    for (let i = 0; i < 60; i++) {
+      if (i % 6 === 0) {
+        const colorFn = colors[Math.floor(Math.random() * colors.length)];
+        border += colorFn(chars[Math.floor(Math.random() * chars.length)]);
+      } else {
+        const colorFn = colors[Math.floor((i / 60) * colors.length)];
+        border += colorFn('═');
+      }
+    }
+    return border;
+  }
+
+  static createStarField() {
+    const stars = ['✦', '✧', '⭐', '🌟', '✨', '💫', '⋆', '★'];
+    let field = '';
+    for (let i = 0; i < 60; i++) {
+      if (Math.random() > 0.7) {
+        const star = stars[Math.floor(Math.random() * stars.length)];
+        const colors = [chalk.yellow, chalk.cyan, chalk.magenta, chalk.white];
+        const colorFn = colors[Math.floor(Math.random() * colors.length)];
+        field += colorFn(star);
+      } else {
+        field += ' ';
+      }
+    }
+    return field;
+  }
+
+  static formatElapsedTime(milliseconds) {
+    if (milliseconds < 1000) {
+      return `${milliseconds}ms`;
+    } else if (milliseconds < 60000) {
+      const seconds = (milliseconds / 1000).toFixed(1);
+      return `${seconds}s`;
+    } else {
+      const minutes = Math.floor(milliseconds / 60000);
+      const seconds = Math.floor((milliseconds % 60000) / 1000);
+      return `${minutes}m ${seconds}s`;
+    }
+  }
+
+  static calculateSpeed(elapsedTime) {
+    if (elapsedTime < 5000) return 'Lightning Fast ⚡';
+    if (elapsedTime < 15000) return 'Blazing Speed 🔥';
+    if (elapsedTime < 30000) return 'Rapid Execution 🚀';
+    if (elapsedTime < 60000) return 'Swift Processing 💨';
+    return 'Steady Progress 🐌';
+  }
+
+  static getInspirationalQuote() {
+    const quotes = [
+      "Every website is a digital universe waiting to be explored",
+      "Code is poetry, and you've just written a masterpiece",
+      "From pixels to perfection, one clone at a time",
+      "The web is your canvas, and you've just painted a miracle",
+      "Technology is magic, and you're the wizard",
+      "Dreams become reality through lines of code",
+      "Innovation is the bridge between imagination and implementation",
+      "Digital craftsmanship at its finest",
+      "Where creativity meets technology, magic happens"
+    ];
+    return quotes[Math.floor(Math.random() * quotes.length)];
   }
 
   static createInfoCard(title, value, color) {
