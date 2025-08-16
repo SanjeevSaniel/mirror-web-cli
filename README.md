@@ -56,6 +56,7 @@ output-dir/
 ```
 
 **Key Benefits:**
+
 - ✅ **Framework Independence**: Works with any hosting provider
 - ✅ **Maximum Compatibility**: Runs on any web server without dependencies
 - ✅ **Lightning Performance**: No framework overhead or runtime bundles

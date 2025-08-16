@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Mirror Web CLI is an **advanced AI-enhanced website conversion tool** that extracts websites from any framework and converts them to universal HTML/CSS/JS. The tool features **comprehensive framework detection**, **authentic Claude Code-inspired UI**, and **GPT-4o-powered analysis** for optimal conversion strategies.
 
 ### ✨ **Recent Major Updates (v2.1)**
+
 - **Universal Framework Conversion**: Converts any framework (React, Vue, Angular, etc.) to vanilla HTML/CSS/JS
 - **Authentic Claude Code UI**: Exact color scheme, gradients, and animations matching Claude Code
 - **Framework-Agnostic Output**: All websites converted to universal HTML/CSS/JS regardless of source
@@ -86,7 +87,7 @@ node src/cli.js https://vue-app.com --ai --clean -o ./converted-site
 
 **All websites are converted to standard HTML/CSS/JS regardless of source framework:**
 
-```
+```Plaintext
 output-dir/
 ├── index.html    # Universal HTML converted from any framework
 ├── styles.css    # CSS extracted and converted from React/Vue/Angular/etc.
@@ -94,6 +95,7 @@ output-dir/
 ```
 
 **Key Benefits:**
+
 - ✅ **Framework Independence**: Works with any hosting provider
 - ✅ **Maximum Compatibility**: Runs on any web server without dependencies
 - ✅ **Lightning Performance**: No framework overhead or runtime bundles
