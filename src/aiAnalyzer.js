@@ -2,6 +2,7 @@ import { OpenAI } from 'openai';
 import puppeteer from 'puppeteer';
 import { load } from 'cheerio';
 import chalk from 'chalk';
+import { frameworkDetector } from './frameworkDetector.js';
 
 export class AIWebsiteAnalyzer {
   constructor() {
@@ -33,13 +34,23 @@ export class AIWebsiteAnalyzer {
     }
   }
 
-  async analyze(url) {
+  async analyze(url, existingFrameworkAnalysis = null) {
     // Initialize client only when analyze is called
     this.initializeClient();
 
     console.log(chalk.blue('🤖 AI analyzing website...'));
 
     const content = await this.fetchWebsiteContent(url);
+    
+    // Use existing framework analysis if provided, otherwise run our own
+    let frameworkResults = existingFrameworkAnalysis;
+    if (!frameworkResults) {
+      frameworkResults = await frameworkDetector.detect(content.html, url);
+    }
+    
+    // Enhance content with advanced framework detection
+    content.frameworkAnalysis = frameworkResults;
+    
     const analysis = await this.performChainOfThoughtAnalysis(content, url);
 
     return analysis;
@@ -64,10 +75,13 @@ export class AIWebsiteAnalyzer {
   }
 
   extractPageInfo($) {
+    // Legacy method - kept for compatibility but enhanced with basic detection
     return {
-      hasReact: !!$('script[src*="react"]').length,
-      hasVue: !!$('script[src*="vue"]').length,
-      hasAngular: !!$('script[src*="angular"]').length,
+      hasReact: !!$('script[src*="react"]').length || !!$('[data-reactroot], #__next').length,
+      hasVue: !!$('script[src*="vue"]').length || !!$('[data-server-rendered="true"], #__nuxt').length,
+      hasAngular: !!$('script[src*="angular"]').length || !!$('[ng-app], app-root').length,
+      hasNextJS: !!$('#__next').length || !!$('script[src*="_next/static"]').length,
+      hasGatsby: !!$('#___gatsby').length,
       cssFiles: $('link[rel="stylesheet"]').length,
       jsFiles: $('script[src]').length,
       images: $('img').length,
@@ -86,10 +100,14 @@ export class AIWebsiteAnalyzer {
   }
 
   detectFramework($) {
-    if ($('script[src*="react"]').length) return 'react';
-    if ($('script[src*="vue"]').length) return 'vue';
-    if ($('script[src*="angular"]').length) return 'angular';
-    if ($('[data-reactroot], [data-react]').length) return 'react';
+    // Enhanced detection with more patterns
+    if ($('#__next').length || $('script[src*="_next/static"]').length) return 'nextjs';
+    if ($('#___gatsby').length) return 'gatsby';
+    if ($('script[src*="react"]').length || $('[data-reactroot], [data-react]').length) return 'react';
+    if ($('#__nuxt').length || $('script[src*="nuxt"]').length) return 'vue';
+    if ($('script[src*="vue"]').length || $('[data-server-rendered="true"]').length) return 'vue';
+    if ($('script[src*="angular"]').length || $('[ng-app], app-root').length) return 'angular';
+    if ($('script[src*="svelte"]').length) return 'svelte';
     return 'vanilla';
   }
 
@@ -98,13 +116,21 @@ export class AIWebsiteAnalyzer {
       You are an AI assistant that analyzes websites for optimal cloning strategy.
       Follow START, THINK, EVALUATE, OUTPUT format for decision making.
       
-      Your goal: Determine the best approach to clone a website based on its structure.
+      Your goal: Determine the best approach to clone a website based on its structure and advanced framework detection.
       
       Consider:
-      - Framework detection (React, Vue, Angular, vanilla)
+      - Advanced framework detection results (React, Next.js, Vue, Nuxt, Angular, Svelte, etc.)
       - Asset priorities (critical vs optional)
       - Content complexity and structure
       - Optimal tech stack for output
+      - Performance characteristics
+      - Component architecture patterns
+      
+      You will receive enhanced framework detection data including:
+      - Detected frameworks with confidence scores
+      - Matched patterns and detection methods
+      - Complexity assessment
+      - Recommended output format
       
       Output JSON Format:
       { "step": "START | THINK | EVALUATE | OUTPUT", "content": "string" }
@@ -113,23 +139,33 @@ export class AIWebsiteAnalyzer {
       {
         "step": "OUTPUT",
         "content": {
-          "detectedFramework": "react|vue|angular|vanilla",
+          "detectedFramework": "nextjs|gatsby|react|vue|nuxt|angular|svelte|vanilla",
           "recommendedOutput": "html|react",
-          "strategy": "spa|static|hybrid",
+          "strategy": "spa|static|hybrid|ssr",
           "assetPriorities": ["css", "js", "images", "fonts"],
           "estimatedComplexity": "low|medium|high",
-          "reasoning": "detailed explanation"
+          "reasoning": "detailed explanation including framework detection confidence"
         }
       }
     `;
+
+    const analysisData = {
+      basicInfo: content.pageInfo,
+      frameworkDetection: content.frameworkAnalysis ? {
+        detected: content.frameworkAnalysis.detected,
+        primaryFramework: content.frameworkAnalysis.primaryFramework,
+        recommendedOutput: content.frameworkAnalysis.recommendedOutput,
+        complexity: content.frameworkAnalysis.complexity,
+        metadata: content.frameworkAnalysis.metadata
+      } : null,
+      url: url
+    };
 
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `Analyze this website for cloning optimization: ${JSON.stringify(
-          content.pageInfo,
-        )}`,
+        content: `Analyze this website for cloning optimization with enhanced framework detection: ${JSON.stringify(analysisData, null, 2)}`,
       },
     ];
 
