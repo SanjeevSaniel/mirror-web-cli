@@ -1,0 +1,715 @@
+import fs from 'fs-extra';
+import path from 'path';
+import chalk from 'chalk';
+import { load } from 'cheerio';
+
+export class FrameworkWriter {
+  constructor(cloner) {
+    this.cloner = cloner;
+    this.assetMappings = new Map(); // absolute URL (and alternates) -> local ./assets/... path
+  }
+
+  async generateOfflineProject() {
+    await fs.ensureDir(this.cloner.options.outputDir);
+
+    const structure = {
+      assets: {
+        css: {},
+        js: {},
+        images: {},
+        fonts: {},
+        icons: {},
+        media: {},
+        data: {},
+      },
+    };
+    await this.createDirectoryStructure(structure);
+
+    // Build initial mappings from already-collected assets
+    this.buildAssetMappings();
+
+    // Rewrite HTML to use local assets (JS-enabled version)
+    const htmlWithJs = await this.generateExactHTMLAndReturn();
+
+    // Single output: index.html (JS-enabled)
+    await fs.writeFile(
+      path.join(this.cloner.options.outputDir, 'index.html'),
+      htmlWithJs,
+      'utf8',
+    );
+
+    // Download everything (including any images we added on the fly)
+    await this.downloadAssetsWithExactNames();
+
+    await this.generateOfflinePackageJson();
+    await this.generateOfflineReadme();
+  }
+
+  buildAssetMappings() {
+    // CSS
+    for (const s of this.cloner.assets.styles) {
+      if (s.url) this.assetMappings.set(s.url, `./assets/css/${s.filename}`);
+    }
+    // JS
+    for (const s of this.cloner.assets.scripts) {
+      if (s.url) this.assetMappings.set(s.url, `./assets/js/${s.filename}`);
+    }
+    // Images
+    for (const img of this.cloner.assets.images) {
+      if (img.url)
+        this.assetMappings.set(img.url, `./assets/images/${img.filename}`);
+      if (img.nextJsUrl) {
+        const absNext = this.cloner.resolveUrl(img.nextJsUrl);
+        this.assetMappings.set(absNext, `./assets/images/${img.filename}`);
+      }
+      if (img.originalPath) {
+        const absOriginalParam = this.cloner.resolveUrl(img.originalPath);
+        this.assetMappings.set(
+          absOriginalParam,
+          `./assets/images/${img.filename}`,
+        );
+      }
+      if (img.local && img.url?.startsWith('data:image/')) {
+        this.assetMappings.set(img.url, `./assets/images/${img.filename}`);
+      }
+    }
+    // Fonts
+    for (const f of this.cloner.assets.fonts) {
+      if (f.url) this.assetMappings.set(f.url, `./assets/fonts/${f.filename}`);
+    }
+    // Icons
+    for (const i of this.cloner.assets.icons) {
+      if (i.url) this.assetMappings.set(i.url, `./assets/icons/${i.filename}`);
+    }
+    // Media
+    for (const m of this.cloner.assets.media) {
+      if (m.url) this.assetMappings.set(m.url, `./assets/media/${m.filename}`);
+    }
+  }
+
+  ensureMappedImage(absUrl) {
+    if (!absUrl) return null;
+
+    if (this.assetMappings.has(absUrl)) {
+      return this.assetMappings.get(absUrl);
+    }
+
+    const existing = this.cloner.assets.images.find((x) => x.url === absUrl);
+    if (existing) {
+      const local = `./assets/images/${existing.filename}`;
+      this.assetMappings.set(absUrl, local);
+      return local;
+    }
+
+    const filename = this.cloner.generateFilename(absUrl, 'images');
+    this.cloner.assets.images.push({
+      url: absUrl,
+      filename,
+      element: 'img',
+      attribute: 'src',
+      local: false,
+    });
+    const local = `./assets/images/${filename}`;
+    this.assetMappings.set(absUrl, local);
+    return local;
+  }
+
+  extractNextImageUrl(nextUrl) {
+    try {
+      const u = new URL(nextUrl, this.cloner.url);
+      const val = u.searchParams.get('url');
+      return val ? decodeURIComponent(val) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  getLocalForNextImage(nextUrl) {
+    const absNext = this.cloner.resolveUrl(nextUrl);
+    if (this.assetMappings.has(absNext)) return this.assetMappings.get(absNext);
+
+    const original = this.extractNextImageUrl(nextUrl);
+    if (original) {
+      const absOriginal = this.cloner.resolveUrl(original);
+      const local = this.ensureMappedImage(absOriginal);
+      if (local) this.assetMappings.set(absNext, local);
+      return local;
+    }
+    return null;
+  }
+
+  // Creates the HTML with all asset rewrites and returns it (JS is preserved)
+  async generateExactHTMLAndReturn() {
+    const $ = this.cloner.$;
+
+    // Minimal offline meta
+    $('head').append(`<meta name="offline-ready" content="true">`);
+    $('head').append(
+      `<meta name="mirrored-from" content="${this.cloner.url}">`,
+    );
+    $('head').append(
+      `<meta name="mirrored-date" content="${new Date().toISOString()}">`,
+    );
+
+    // Stylesheets
+    $('link[rel="stylesheet"], link[rel="preload"][as="style"]').each(
+      (_, el) => {
+        const $el = $(el);
+        const href = $el.attr('href');
+        if (!href) return;
+        const abs = this.cloner.resolveUrl(href);
+        if (this.assetMappings.has(abs)) {
+          $el.attr('href', this.assetMappings.get(abs));
+        }
+      },
+    );
+
+    // Scripts (rewrite paths; keep JS)
+    $('script[src]').each((_, el) => {
+      const $el = $(el);
+      const src = $el.attr('src');
+      if (!src) return;
+
+      if (
+        this.cloner.options.clean &&
+        this.cloner.assetManager.isTrackingScript(src)
+      ) {
+        $el.remove();
+        return;
+      }
+
+      const abs = this.cloner.resolveUrl(src);
+      if (this.assetMappings.has(abs)) {
+        $el.attr('src', this.assetMappings.get(abs));
+      }
+    });
+
+    const firstTruthy = (...vals) =>
+      vals.find((v) => v && String(v).trim().length > 0) || null;
+
+    // Images: src + lazy variants
+    $('img').each((_, el) => {
+      const $el = $(el);
+      const src = $el.attr('src') || '';
+      const dataSrc = firstTruthy(
+        $el.attr('data-src'),
+        $el.attr('data-lazy-src'),
+        $el.attr('data-original'),
+      );
+
+      if (src.includes('/_next/image')) {
+        const local = this.getLocalForNextImage(src);
+        if (local) {
+          $el.attr('src', local);
+          return;
+        }
+      }
+
+      if (src && !src.startsWith('data:')) {
+        const abs = this.cloner.resolveUrl(src);
+        const local = this.ensureMappedImage(abs);
+        if (local) $el.attr('src', local);
+        return;
+      }
+
+      if (dataSrc && !dataSrc.startsWith('data:')) {
+        const abs = this.cloner.resolveUrl(dataSrc);
+        const local = this.ensureMappedImage(abs);
+        if (local) $el.attr('src', local);
+      }
+    });
+
+    // srcset handling
+    $('[srcset]').each((_, el) => {
+      const $el = $(el);
+      const srcset = $el.attr('srcset');
+      if (!srcset) return;
+
+      const updated = srcset
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const parts = entry.split(/\s+/);
+          const url = parts[0];
+          const desc = parts.slice(1).join(' ');
+          if (!url) return entry;
+
+          if (url.includes('/_next/image')) {
+            const local = this.getLocalForNextImage(url);
+            if (local) return [local, desc].filter(Boolean).join(' ');
+          } else if (!url.startsWith('data:')) {
+            const abs = this.cloner.resolveUrl(url);
+            const local = this.ensureMappedImage(abs);
+            if (local) return [local, desc].filter(Boolean).join(' ');
+          }
+          return entry;
+        })
+        .join(', ');
+
+      $el.attr('srcset', updated);
+    });
+
+    // Posters
+    $('video[poster]').each((_, el) => {
+      const $el = $(el);
+      const poster = $el.attr('poster');
+      if (!poster || poster.startsWith('data:')) return;
+      const abs = this.cloner.resolveUrl(poster);
+      const local = this.ensureMappedImage(abs);
+      if (local) $el.attr('poster', local);
+    });
+
+    // SVG refs
+    $(
+      'svg image[href], svg image[xlink\\:href], svg use[href], svg use[xlink\\:href]',
+    ).each((_, el) => {
+      const $el = $(el);
+      const href = $el.attr('href') || $el.attr('xlink:href');
+      if (!href || href.startsWith('data:')) return;
+
+      const abs = this.cloner.resolveUrl(href);
+      const local = this.ensureMappedImage(abs);
+      if (local) {
+        $el.attr('href', local);
+        $el.attr('xlink:href', local);
+      }
+    });
+
+    // Inline style backgrounds
+    $('[style]').each((_, el) => {
+      const $el = $(el);
+      const style = $el.attr('style');
+      if (!style) return;
+
+      const updated = style.replace(
+        /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
+        (m, _q, raw) => {
+          if (!raw || raw.startsWith('data:')) return m;
+          const abs = this.cloner.resolveUrl(raw);
+          const local = this.ensureMappedImage(abs);
+          return local ? `url('${local}')` : m;
+        },
+      );
+      if (updated !== style) $el.attr('style', updated);
+    });
+
+    // Inline <style> blocks: rewrite CSS url(...) and download assets later
+    const axios = (await import('axios')).default;
+    await Promise.all(
+      $('style')
+        .toArray()
+        .map(async (el) => {
+          const $el = $(el);
+          let css = $el.html() || '';
+          if (!css.trim()) return;
+
+          css = await this.rewriteCssUrlsAndDownload(
+            css,
+            this.cloner.url,
+            axios,
+            { fromInline: true },
+          );
+          $el.html(css);
+        }),
+    );
+
+    // Icons
+    $('link[rel*="icon"]').each((_, el) => {
+      const $el = $(el);
+      const href = $el.attr('href');
+      if (!href || href.startsWith('data:')) return;
+      const abs = this.cloner.resolveUrl(href);
+      if (this.assetMappings.has(abs)) {
+        $el.attr('href', this.assetMappings.get(abs));
+      }
+    });
+
+    // Final safety net: replace any leftover _next/image references
+    let html = $.html();
+    html = this.finalizeNextImageReplacements(html);
+    return html;
+  }
+
+  // Final global pass to catch any leftover /_next/image? URLs (src, srcset, poster, href)
+  finalizeNextImageReplacements(html) {
+    html = html.replace(
+      /\b(src|poster|href)=["']([^"']*_next\/image\?[^"']+)["']/gi,
+      (_m, attr, urlVal) => {
+        const local = this.getLocalForNextImage(urlVal);
+        return local ? `${attr}="${local}"` : `${attr}="${urlVal}"`;
+      },
+    );
+
+    html = html.replace(/\bsrcset=["']([^"']+)["']/gi, (_m, srcsetVal) => {
+      const updated = srcsetVal
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const parts = entry.split(/\s+/);
+          const url = parts[0];
+          const desc = parts.slice(1).join(' ');
+          if (url && url.includes('/_next/image')) {
+            const local = this.getLocalForNextImage(url);
+            if (local) return [local, desc].filter(Boolean).join(' ');
+          }
+          return entry;
+        })
+        .join(', ');
+      return `srcset="${updated}"`;
+    });
+    return html;
+  }
+
+  async downloadAssetsWithExactNames() {
+    const axios = (await import('axios')).default;
+
+    // Images
+    if (this.cloner.assets.images.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(
+            `    Downloading ${this.cloner.assets.images.length} images...`,
+          ),
+        );
+      }
+      for (const img of this.cloner.assets.images) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'images',
+          img.filename,
+        );
+        await fs.ensureDir(path.dirname(dest));
+
+        if (img.buffer) {
+          await fs.writeFile(dest, img.buffer);
+          continue;
+        }
+
+        const tryUrls = [];
+        if (img.url) tryUrls.push(img.url);
+        if (img.nextJsUrl) tryUrls.push(this.cloner.resolveUrl(img.nextJsUrl));
+
+        let saved = false;
+        for (const u of tryUrls) {
+          try {
+            const data = await this.fetchArrayBuffer(u, axios);
+            await fs.writeFile(dest, data);
+            saved = true;
+            break;
+          } catch (e) {
+            this.cloner.logger.warnNonCritical('image', u, e);
+          }
+        }
+        if (!saved) {
+          this.cloner.logger.warnNonCritical(
+            'image',
+            img.url || img.nextJsUrl,
+            new Error('exhausted sources'),
+          );
+        }
+      }
+    }
+
+    // CSS externals
+    const cssExternals = this.cloner.assets.styles.filter(
+      (s) => s.url && s.type === 'external',
+    );
+    if (cssExternals.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(`    Downloading ${cssExternals.length} CSS files...`),
+        );
+      }
+      for (const css of cssExternals) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'css',
+          css.filename,
+        );
+        try {
+          const res = await axios.get(css.url, {
+            responseType: 'text',
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          let text = res.data || '';
+          text = await this.rewriteCssUrlsAndDownload(text, css.url, axios, {
+            fromInline: false,
+          });
+          await fs.ensureDir(path.dirname(dest));
+          await fs.writeFile(dest, text, 'utf8');
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('styles', css.url, e);
+        }
+      }
+    }
+
+    // JS externals
+    const jsExternals = this.cloner.assets.scripts.filter((s) => s.url);
+    if (jsExternals.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(`    Downloading ${jsExternals.length} JS files...`),
+        );
+      }
+      for (const s of jsExternals) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'js',
+          s.filename,
+        );
+        try {
+          const res = await axios.get(s.url, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          await fs.ensureDir(path.dirname(dest));
+          await fs.writeFile(dest, res.data);
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('scripts', s.url, e);
+        }
+      }
+    }
+
+    // Fonts
+    if (this.cloner.assets.fonts.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(
+            `    Downloading ${this.cloner.assets.fonts.length} fonts...`,
+          ),
+        );
+      }
+      for (const f of this.cloner.assets.fonts) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'fonts',
+          f.filename,
+        );
+        if (!f.url) continue;
+        try {
+          const res = await axios.get(f.url, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          await fs.ensureDir(path.dirname(dest));
+          await fs.writeFile(dest, res.data);
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('fonts', f.url, e);
+        }
+      }
+    }
+
+    // Icons
+    if (this.cloner.assets.icons.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(
+            `    Downloading ${this.cloner.assets.icons.length} icons...`,
+          ),
+        );
+      }
+      for (const i of this.cloner.assets.icons) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'icons',
+          i.filename,
+        );
+        if (!i.url) continue;
+        try {
+          const res = await axios.get(i.url, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          await fs.ensureDir(path.dirname(dest));
+          await fs.writeFile(dest, res.data);
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('icon', i.url, e);
+        }
+      }
+    }
+
+    // Media
+    if (this.cloner.assets.media.length) {
+      if (!this.cloner.options.quiet) {
+        console.log(
+          chalk.gray(
+            `    Downloading ${this.cloner.assets.media.length} media files...`,
+          ),
+        );
+      }
+      for (const m of this.cloner.assets.media) {
+        const dest = path.join(
+          this.cloner.options.outputDir,
+          'assets',
+          'media',
+          m.filename,
+        );
+        if (!m.url) continue;
+        try {
+          const res = await axios.get(m.url, {
+            responseType: 'arraybuffer',
+            timeout: 45000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          await fs.ensureDir(path.dirname(dest));
+          await fs.writeFile(dest, res.data);
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('media', m.url, e);
+        }
+      }
+    }
+  }
+
+  async fetchArrayBuffer(url, axios) {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0',
+      Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      Referer: this.cloner.url,
+    };
+    const res = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 45000,
+      headers,
+    });
+    return res.data;
+  }
+
+  // Rewrite url(...) in CSS. fromInline=true => rewrite to ./assets/...; else ../{subdir}/...
+  async rewriteCssUrlsAndDownload(
+    cssText,
+    cssBaseUrl,
+    axios,
+    options = { fromInline: false },
+  ) {
+    const urlRegex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+    const outputDir = this.cloner.options.outputDir;
+    const fromInline = !!options.fromInline;
+
+    const replacements = await Promise.all(
+      Array.from(cssText.matchAll(urlRegex)).map(async (m) => {
+        const full = m[0];
+        const raw = m[2];
+        if (!raw || raw.startsWith('data:')) {
+          return { from: full, to: full };
+        }
+
+        let abs;
+        try {
+          abs = new URL(raw, cssBaseUrl).href;
+        } catch {
+          return { from: full, to: full };
+        }
+
+        const lower = abs.split('?')[0].toLowerCase();
+        let subdir = 'images';
+        if (/\.(woff2?|ttf|otf|eot)$/.test(lower)) subdir = 'fonts';
+        else if (/\.(mp4|webm|ogg|mp3|wav|m4a)$/.test(lower)) subdir = 'media';
+        else if (/\.(svg|png|jpe?g|gif|webp|avif|ico)$/.test(lower))
+          subdir = 'images';
+
+        const filename = this.cloner.generateFilename(
+          abs,
+          subdir === 'images'
+            ? 'images'
+            : subdir === 'fonts'
+            ? 'fonts'
+            : 'media',
+        );
+        const destRel = fromInline
+          ? `./assets/${subdir}/${filename}`
+          : `../${subdir}/${filename}`;
+        const destAbs = path.join(outputDir, 'assets', subdir, filename);
+
+        try {
+          await fs.ensureDir(path.dirname(destAbs));
+          const exists = await fs.pathExists(destAbs);
+          if (!exists) {
+            const data = await this.fetchArrayBuffer(abs, axios);
+            await fs.writeFile(destAbs, data);
+          }
+
+          this.assetMappings.set(abs, `./assets/${subdir}/${filename}`);
+          return { from: full, to: `url('${destRel}')` };
+        } catch (e) {
+          this.cloner.logger.warnNonCritical('css-asset', abs, e);
+          return { from: full, to: full };
+        }
+      }),
+    );
+
+    let out = cssText;
+    for (const r of replacements) {
+      out = out.replace(r.from, r.to);
+    }
+    return out;
+  }
+
+  async createDirectoryStructure(structure, basePath = '') {
+    for (const [name, content] of Object.entries(structure)) {
+      const fullPath = path.join(this.cloner.options.outputDir, basePath, name);
+      if (typeof content === 'object' && content !== null) {
+        await fs.ensureDir(fullPath);
+        await this.createDirectoryStructure(content, path.join(basePath, name));
+      } else {
+        await fs.ensureDir(path.dirname(fullPath));
+        if (typeof content === 'string') {
+          await fs.writeFile(fullPath, content);
+        }
+      }
+    }
+  }
+
+  async generateOfflinePackageJson() {
+    const packageJson = {
+      name: `mirror-${this.cloner.domain}`,
+      version: '1.0.0',
+      description: `Offline mirror of ${this.cloner.url}`,
+      main: 'index.html',
+      type: 'module',
+      scripts: {
+        start: 'node server.js',
+        serve: 'python -m http.server 8000',
+        'serve-node': 'npx http-server -p 8000 -o',
+      },
+      keywords: ['mirror', 'offline', 'website'],
+      author: 'Mirror Web CLI',
+      license: 'MIT',
+    };
+
+    await fs.writeFile(
+      path.join(this.cloner.options.outputDir, 'package.json'),
+      JSON.stringify(packageJson, null, 2),
+    );
+  }
+
+  async generateOfflineReadme() {
+    const framework = this.cloner.analysis?.primaryFramework?.name || 'HTML';
+    const readme = `# ${this.cloner.domain} - Offline Mirror
+
+> Offline snapshot of ${this.cloner.url}
+
+Files:
+- index.html           -> JS-enabled page with all assets rewritten locally
+
+Serve locally:
+- python -m http.server 8000
+- or: npm start (uses provided server.js)
+- then open http://localhost:8000
+`;
+    await fs.writeFile(
+      path.join(this.cloner.options.outputDir, 'README.md'),
+      readme,
+    );
+  }
+}

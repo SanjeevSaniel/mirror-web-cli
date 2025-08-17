@@ -1,152 +1,136 @@
 #!/usr/bin/env node
 
+/**
+ * @fileoverview Mirror Web CLI - Command Line Interface
+ * @description Main entry point for the Mirror Web CLI tool that provides an advanced
+ * website mirroring solution with framework preservation capabilities.
+ * 
+ * Features:
+ * - Universal framework detection (React, Vue, Angular, Next.js, etc.)
+ * - Framework-preserving mirroring that maintains original structure
+ * - AI-powered analysis for optimal conversion strategies
+ * - Beautiful terminal UI with progress tracking and animations
+ * - Comprehensive asset extraction and optimization
+ * 
+ * @version 1.0.0
+ * @author Sanjeev Saniel Kujur
+ * @license MIT
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { cloneToTechStack } from './cloner.js';
-import { isAIAvailable } from './aiAnalyzer.js';
-import { formatTitleToFolderName } from './utils.js';
-import { display } from './display.js';
-import { frameworkDetector } from './frameworkDetector.js';
-import { chromium } from 'playwright';
-import { load } from 'cheerio';
+import { MirrorCloner } from './core/mirror-cloner.js';
 
 const program = new Command();
 
-// Enhanced function to extract website metadata and detect frameworks
-async function analyzeWebsite(url) {
-  try {
-    display.step(1, 5, 'Connecting to Website', 'Launching Playwright browser and navigating to target URL');
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
-    
-    display.step(2, 5, 'Extracting Metadata', 'Reading page title and analyzing framework patterns');
-    const html = await page.content();
-    await browser.close();
-    
-    const $ = load(html);
-    const title = $('title').text() || '';
-    
-    // Perform framework detection
-    const frameworkResults = await frameworkDetector.detect(html, url);
-    
-    return {
-      title,
-      html,
-      frameworks: frameworkResults
-    };
-  } catch (error) {
-    display.warning('Could not extract metadata', error.message, ['Using URL-based defaults']);
-    return {
-      title: '',
-      html: '',
-      frameworks: { detected: [], recommendedOutput: 'html', complexity: 'low' }
-    };
-  }
-}
-
 program
   .name('mirror-web-cli')
-  .description('Clone websites as clean HTML/CSS/JS or React projects')
+  .description('Mirror Web CLI v1.0 - Professional website mirroring with intelligent framework preservation')
   .version('1.0.0')
-  .argument('<url>', 'Website URL to clone')
-  .option('-o, --output <dir>', 'Output directory', './cloned-site')
-  .option('-t, --tech <stack>', 'Output tech stack: html|react (auto-detected if not specified)', 'auto')
-  .option('--ai', 'Enable AI-powered optimization', false)
-  .option('--clean', 'Generate clean, minimal code', false)
-  .option('--no-detect', 'Disable framework auto-detection', false)
+  .argument('<url>', 'Target website URL to mirror (supports http/https)')
+  .option('-o, --output <dir>', 'Custom output directory path (defaults to domain name)')
+  .option('--clean', 'Remove tracking scripts, analytics, and third-party code', false)
+  .option('--ai', 'Enable AI-powered website analysis (requires OPENAI_API_KEY)', false)
+  .option('--debug', 'Enable detailed debug logging and error traces', false)
+  .option('--timeout <ms>', 'Browser page load timeout in milliseconds', '120000')
+  .option('--headless <bool>', 'Run browser in headless mode (true/false)', 'true')
   .action(async (url, options) => {
-    // Start timing
-    const startTime = Date.now();
-    
     try {
-      
-      // Beautiful header with Claude Code styling
-      display.header('🪞 MIRROR WEB CLI', 'AI-Enhanced Website Cloning Tool');
-      
-      // Initial configuration display
-      display.info('Initial Configuration', '', [
-        `Target URL: ${chalk.cyan(url)}`,
-        `Technology Stack: ${chalk.magenta(options.tech === 'auto' ? 'AUTO-DETECT' : options.tech.toUpperCase())}`,
-        `Clean Mode: ${options.clean ? chalk.green('ENABLED') : chalk.gray('DISABLED')}`
-      ]);
-
-      // Analyze website and detect frameworks (unless output is explicitly provided)
-      let outputDir = options.output;
-      let websiteAnalysis = { title: '', frameworks: { detected: [], recommendedOutput: 'html', complexity: 'low' } };
-      
-      if (options.output === './cloned-site' || options.tech === 'auto' || !options.noDetect) {
-        display.section('🔍 ANALYZING WEBSITE STRUCTURE');
-        websiteAnalysis = await analyzeWebsite(url);
-        
-        // Display framework detection results
-        display.frameworkResults(websiteAnalysis.frameworks);
-        
-        // Generate output directory name if needed
-        if (options.output === './cloned-site') {
-          const folderName = formatTitleToFolderName(websiteAnalysis.title, url);
-          outputDir = `./${folderName}`;
-          
-          display.success('Website Analysis Complete', '', [
-            `Title: "${websiteAnalysis.title || 'No title found'}"`,
-            `Folder: ${chalk.cyan(folderName)}`,
-            `Recommended: ${chalk.magenta(websiteAnalysis.frameworks.recommendedOutput.toUpperCase())}`
-          ]);
-        }
-      }
-
-      // Determine final tech stack - ALWAYS HTML for offline compatibility
-      let finalTechStack = 'html'; // Force HTML output for offline use
-      if (options.tech !== 'auto') {
-        finalTechStack = options.tech; // Only override if user explicitly specifies
+      // Validate and normalize URL
+      if (!url.startsWith('http')) {
+        url = 'https://' + url;
       }
       
-      display.info('Auto-Detection Result', 
-        `Converting ${chalk.cyan(websiteAnalysis.frameworks.detected[0]?.name || 'website')} → ${chalk.green.bold('HTML/CSS/JS')} for offline compatibility`
-      );
-
-      // Check AI availability
-      const aiRequested = options.ai;
-      const aiAvailable = isAIAvailable();
+      new URL(url); // Validate URL format
       
-      if (aiRequested) {
-        display.section('🤖 AI OPTIMIZATION SETUP');
-        if (aiAvailable) {
-          display.success('AI Features Enabled', 'OpenAI API key detected and validated');
-        } else {
-          display.warning('AI Features Disabled', '', [
-            'OPENAI_API_KEY not found',
-            'Set your API key: export OPENAI_API_KEY="your-key"'
-          ]);
-        }
-      }
-
-      // Configuration summary
+      // Configure mirroring options
       const config = {
-        outputDir: outputDir,
-        techStack: finalTechStack,
+        outputDir: options.output,
         clean: options.clean,
-        aiEnabled: aiRequested && aiAvailable,
-        startTime: startTime,
-        frameworkAnalysis: websiteAnalysis.frameworks,
+        ai: options.ai,
+        debug: options.debug,
+        timeout: parseInt(options.timeout),
+        headless: options.headless !== 'false'
       };
-
-      display.section('⚙️ CLONING PROCESS');
-
-      const result = await cloneToTechStack(url, config);
-
-      // Calculate total elapsed time
-      const totalElapsedTime = Date.now() - startTime;
-
-      // Beautiful success display with timing
-      display.completion(true, outputDir, finalTechStack, totalElapsedTime);
-
+      
+      // Initialize and execute mirroring process
+      const cloner = new MirrorCloner(url, config);
+      const success = await cloner.clone();
+      
+      process.exit(success ? 0 : 1);
+      
     } catch (error) {
-      const totalElapsedTime = Date.now() - startTime;
-      display.error('Cloning Process Failed', error.message);
-      display.completion(false, '', '', totalElapsedTime);
+      console.log('');
+      console.log(chalk.red('❌ Error: ' + error.message));
+      
+      if (error.message.includes('Invalid URL')) {
+        console.log(chalk.gray('   Please provide a valid URL (e.g., https://example.com)'));
+      }
+      
       process.exit(1);
     }
   });
+
+// Enhanced help documentation
+program.addHelpText('after', `
+
+${chalk.hex('#7c3aed').bold('USAGE EXAMPLES:')}
+
+  ${chalk.gray('# Basic website mirroring')}
+  ${chalk.cyan('mirror-web-cli https://example.com')}
+  
+  ${chalk.gray('# Mirror to custom directory')}
+  ${chalk.cyan('mirror-web-cli https://react-app.com -o ./my-mirror')}
+  
+  ${chalk.gray('# Clean mirror without tracking scripts')}
+  ${chalk.cyan('mirror-web-cli https://site.com --clean')}
+  
+  ${chalk.gray('# Debug mode with detailed logging')}
+  ${chalk.cyan('mirror-web-cli https://complex-site.com --debug')}
+
+${chalk.hex('#7c3aed').bold('FRAMEWORK SUPPORT:')}
+  ${chalk.green('✓')} React/Next.js    ${chalk.gray('→ Preserves component structure')}
+  ${chalk.green('✓')} Vue/Nuxt        ${chalk.gray('→ Maintains reactive patterns')}
+  ${chalk.green('✓')} Angular         ${chalk.gray('→ Keeps module organization')}
+  ${chalk.green('✓')} Svelte/SvelteKit ${chalk.gray('→ Preserves store patterns')}
+  ${chalk.green('✓')} Static Sites    ${chalk.gray('→ Clean HTML/CSS/JS output')}
+
+${chalk.hex('#7c3aed').bold('OUTPUT FEATURES:')}
+  ${chalk.green('•')} Framework-preserving structure with intelligent asset optimization
+  ${chalk.green('•')} Offline-ready websites with localized resources
+  ${chalk.green('•')} Clean code generation with optional tracking removal
+  ${chalk.green('•')} Professional project structure ready for development
+
+${chalk.dim('Need help? Visit:')} ${chalk.blue('https://github.com/SanjeevSaniel/mirror-web-cli')}
+`);
+
+// Enhanced welcome screen when no arguments provided
+if (process.argv.length <= 2) {
+  const width = Math.min(process.stdout.columns || 80, 80);
+  const line = '═'.repeat(width);
+  const spacer = ' '.repeat(Math.floor((width - 32) / 2));
+  
+  console.log('');
+  console.log(chalk.hex('#7c3aed')(line));
+  console.log(chalk.hex('#7c3aed').bold(`${spacer}🪞 Mirror Web CLI v1.0`));
+  console.log(chalk.hex('#06b6d4')(`${spacer}Professional Website Mirroring`));
+  console.log(chalk.hex('#7c3aed')(line));
+  console.log('');
+  console.log(chalk.white('Mirror any website while preserving its framework structure and functionality.'));
+  console.log('');
+  console.log(chalk.hex('#10b981')('✨ Features:'));
+  console.log(`   ${chalk.green('•')} ${chalk.white('Intelligent framework detection (React, Vue, Angular, Next.js, etc.)')}`);
+  console.log(`   ${chalk.green('•')} ${chalk.white('Framework-preserving output with professional structure')}`);
+  console.log(`   ${chalk.green('•')} ${chalk.white('Comprehensive asset extraction and optimization')}`);
+  console.log(`   ${chalk.green('•')} ${chalk.white('Clean code generation with tracking script removal')}`);
+  console.log('');
+  console.log(chalk.hex('#f59e0b')('🚀 Quick Start:'));
+  console.log(`   ${chalk.cyan('mirror-web-cli https://example.com')}`);
+  console.log(`   ${chalk.cyan('mirror-web-cli https://react-app.com --clean -o ./my-project')}`);
+  console.log('');
+  console.log(chalk.gray('Run ') + chalk.white('mirror-web-cli --help') + chalk.gray(' for all available options and examples'));
+  console.log('');
+  process.exit(0);
+}
 
 program.parse(process.argv);

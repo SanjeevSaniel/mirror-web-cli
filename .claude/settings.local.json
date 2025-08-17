@@ -1,10 +1,16 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(node:*)",
+      "Bash(mv:*)",
+      "Bash(timeout:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(grep:*)"
+    ],
     "additionalDirectories": [
       "D:\\d\\1A-Personal\\D-Learnings\\1-Projects"
-    ],
-    "allow": [
-      "Bash(rm:*)"
     ]
   }
 }
