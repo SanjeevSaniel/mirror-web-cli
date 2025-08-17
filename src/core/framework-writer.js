@@ -390,6 +390,19 @@ export class FrameworkWriter {
       if (local) $el.attr('poster', local);
     });
 
+    // Video and Audio sources
+    $('video[src], audio[src], source[src]').each((_, el) => {
+      const $el = $(el);
+      const src = $el.attr('src');
+      if (!src || src.startsWith('data:')) return;
+      
+      const abs = this.cloner.resolveUrl(src);
+      if (this.assetMappings.has(abs)) {
+        const local = this.assetMappings.get(abs);
+        $el.attr('src', local);
+      }
+    });
+
     // SVG refs
     $(
       'svg image[href], svg image[xlink\\:href], svg use[href], svg use[xlink\\:href]',
@@ -669,33 +682,97 @@ export class FrameworkWriter {
       }
     }
 
-    // Media
+    // Media (Videos and Audio)
     if (this.cloner.assets.media.length) {
-      if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(
-            `    Downloading ${this.cloner.assets.media.length} media files...`,
-          ),
-        );
+      const videoFiles = this.cloner.assets.media.filter(m => m.type === 'video');
+      const audioFiles = this.cloner.assets.media.filter(m => m.type === 'audio');
+      const otherMedia = this.cloner.assets.media.filter(m => !['video', 'audio'].includes(m.type));
+      
+      if (videoFiles.length > 0) {
+        if (!this.cloner.options.quiet) {
+          console.log(
+            chalk.gray(`    Downloading ${videoFiles.length} video files...`)
+          );
+        }
+        for (const video of videoFiles) {
+          await this.downloadMediaFile(video, axios, 'video');
+        }
       }
-      for (const m of this.cloner.assets.media) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'media',
-          m.filename,
-        );
-        if (!m.url) continue;
+      
+      if (audioFiles.length > 0) {
+        if (!this.cloner.options.quiet) {
+          console.log(
+            chalk.gray(`    Downloading ${audioFiles.length} audio files...`)
+          );
+        }
+        for (const audio of audioFiles) {
+          await this.downloadMediaFile(audio, axios, 'audio');
+        }
+      }
+      
+      if (otherMedia.length > 0) {
+        if (!this.cloner.options.quiet) {
+          console.log(
+            chalk.gray(`    Downloading ${otherMedia.length} other media files...`)
+          );
+        }
+        for (const media of otherMedia) {
+          await this.downloadMediaFile(media, axios, 'media');
+        }
+      }
+    }
+  }
+
+  async downloadMediaFile(mediaItem, axios, mediaType) {
+    const dest = path.join(
+      this.cloner.options.outputDir,
+      'assets',
+      'media',
+      mediaItem.filename,
+    );
+    
+    if (!mediaItem.url) return;
+    
+    try {
+      // Use longer timeout for video files as they can be large
+      const timeout = mediaType === 'video' ? 120000 : 60000; // 2 minutes for videos, 1 minute for audio
+      
+      if (!this.cloner.options.quiet && mediaType === 'video') {
+        console.log(chalk.gray(`      Downloading video: ${mediaItem.filename}`));
+      }
+      
+      const res = await axios.get(mediaItem.url, {
+        responseType: 'arraybuffer',
+        timeout: timeout,
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': mediaType === 'video' 
+            ? 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5'
+            : 'audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,*/*;q=0.5',
+          'Referer': this.cloner.url,
+        },
+      });
+      
+      await fs.ensureDir(path.dirname(dest));
+      await fs.writeFile(dest, res.data);
+      
+      if (!this.cloner.options.quiet && mediaType === 'video') {
+        const sizeKB = Math.round(res.data.length / 1024);
+        console.log(chalk.green(`      ✓ Downloaded ${mediaItem.filename} (${sizeKB}KB)`));
+      }
+      
+    } catch (e) {
+      this.cloner.logger.warnNonCritical(mediaType, mediaItem.url, e);
+      
+      // For videos, try to provide a fallback placeholder
+      if (mediaType === 'video') {
         try {
-          const res = await axios.get(m.url, {
-            responseType: 'arraybuffer',
-            timeout: 45000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-          });
           await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data);
-        } catch (e) {
-          this.cloner.logger.warnNonCritical('media', m.url, e);
+          // Create a simple HTML fallback file explaining the video couldn't be downloaded
+          const fallbackHtml = `<!-- Video could not be downloaded: ${mediaItem.url} -->`;
+          await fs.writeFile(dest + '.error.txt', fallbackHtml, 'utf8');
+        } catch (fallbackError) {
+          // Ignore fallback errors
         }
       }
     }

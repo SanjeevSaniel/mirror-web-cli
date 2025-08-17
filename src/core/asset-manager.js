@@ -280,37 +280,126 @@ export class AssetManager {
   }
 
   async extractMedia($) {
-    $('video[src], audio[src], source[src]').each((_, el) => {
+    // Extract video sources from <video> tags and their <source> children
+    $('video').each((_, videoEl) => {
+      const $video = $(videoEl);
+      
+      // Direct video src attribute
+      const src = $video.attr('src');
+      if (src && !src.startsWith('data:') && this.isValidVideoUrl(src)) {
+        this.addMediaAsset(src, 'video');
+      }
+      
+      // Video poster images
+      const poster = $video.attr('poster');
+      if (poster && !poster.startsWith('data:')) {
+        const abs = this.cloner.resolveUrl(poster);
+        const filename = this.cloner.generateFilename(abs, 'images');
+        this.cloner.assets.images.push({
+          url: abs,
+          filename,
+          element: 'video',
+          attribute: 'poster',
+          local: false,
+        });
+      }
+      
+      // Source elements within video
+      $video.find('source[src]').each((_, sourceEl) => {
+        const sourceSrc = $(sourceEl).attr('src');
+        if (sourceSrc && !sourceSrc.startsWith('data:') && this.isValidVideoUrl(sourceSrc)) {
+          this.addMediaAsset(sourceSrc, 'video');
+        }
+      });
+    });
+
+    // Extract audio sources
+    $('audio').each((_, audioEl) => {
+      const $audio = $(audioEl);
+      
+      // Direct audio src attribute
+      const src = $audio.attr('src');
+      if (src && !src.startsWith('data:') && this.isValidAudioUrl(src)) {
+        this.addMediaAsset(src, 'audio');
+      }
+      
+      // Source elements within audio
+      $audio.find('source[src]').each((_, sourceEl) => {
+        const sourceSrc = $(sourceEl).attr('src');
+        if (sourceSrc && !sourceSrc.startsWith('data:') && this.isValidAudioUrl(sourceSrc)) {
+          this.addMediaAsset(sourceSrc, 'audio');
+        }
+      });
+    });
+
+    // Standalone source elements (less common but possible)
+    $('source[src]').each((_, el) => {
       const src = $(el).attr('src');
       if (!src || src.startsWith('data:')) return;
 
-      const abs = this.cloner.resolveUrl(src);
-      const filename = this.cloner.generateFilename(abs, 'media');
-      const tag = (el.tagName || '').toLowerCase();
-      const type =
-        tag === 'audio' ? 'audio' : tag === 'video' ? 'video' : 'media';
-
-      this.cloner.assets.media.push({
-        url: abs,
-        filename,
-        type,
-      });
+      const type = $(el).attr('type') || '';
+      let mediaType = 'media';
+      
+      if (type.startsWith('video/') || this.isValidVideoUrl(src)) {
+        mediaType = 'video';
+      } else if (type.startsWith('audio/') || this.isValidAudioUrl(src)) {
+        mediaType = 'audio';
+      }
+      
+      if (this.isValidVideoUrl(src) || this.isValidAudioUrl(src)) {
+        this.addMediaAsset(src, mediaType);
+      }
     });
+  }
 
-    $('video[poster]').each((_, el) => {
-      const poster = $(el).attr('poster');
-      if (!poster || poster.startsWith('data:')) return;
+  addMediaAsset(url, type = 'media') {
+    const abs = this.cloner.resolveUrl(url);
+    if (!abs) return;
+    if (this.processedUrls.has(abs)) return;
+    this.processedUrls.add(abs);
 
-      const abs = this.cloner.resolveUrl(poster);
-      const filename = this.cloner.generateFilename(abs, 'images');
-      this.cloner.assets.images.push({
-        url: abs,
-        filename,
-        element: 'video',
-        attribute: 'poster',
-        local: false,
-      });
+    const filename = this.cloner.generateFilename(abs, 'media');
+    this.cloner.assets.media.push({
+      url: abs,
+      filename,
+      type,
     });
+  }
+
+  isValidVideoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    
+    const videoExtensions = [
+      '.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', 
+      '.flv', '.mkv', '.m4v', '.3gp', '.ogv'
+    ];
+    const clean = url.split('?')[0].split('#')[0].toLowerCase();
+    
+    return (
+      videoExtensions.some(ext => clean.endsWith(ext)) ||
+      clean.includes('/video/') ||
+      clean.includes('/videos/') ||
+      clean.includes('video=') ||
+      clean.includes('.mp4') ||
+      clean.includes('.webm')
+    );
+  }
+
+  isValidAudioUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    
+    const audioExtensions = [
+      '.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', 
+      '.wma', '.opus', '.oga'
+    ];
+    const clean = url.split('?')[0].split('#')[0].toLowerCase();
+    
+    return (
+      audioExtensions.some(ext => clean.endsWith(ext)) ||
+      clean.includes('/audio/') ||
+      clean.includes('/sounds/') ||
+      clean.includes('audio=')
+    );
   }
 
   isValidImageUrl(url) {
