@@ -22,39 +22,55 @@ import chalk from 'chalk';
 import { MirrorCloner } from './core/mirror-cloner.js';
 
 /**
- * Validates and handles AI API key setup
+ * Validates and handles OpenAI API key setup for AI features
  * @param {boolean} aiEnabled - Whether AI features are requested
- * @param {string} apiKey - Optional API key from command line
+ * @param {string} openaiApiKey - Optional OpenAI API key from command line
  * @returns {boolean} - Whether AI features should be enabled
  */
-function validateAISetup(aiEnabled, apiKey) {
+function validateAISetup(aiEnabled, openaiApiKey) {
   if (!aiEnabled) return false;
   
-  // Check for API key in environment or parameter
-  const finalApiKey = apiKey || process.env.OPENAI_API_KEY;
+  // Check for OpenAI API key in environment or parameter
+  const finalApiKey = openaiApiKey || process.env.OPENAI_API_KEY;
   
   if (!finalApiKey) {
     console.log('');
-    console.log(chalk.yellow('⚠️  AI features requested but no API key found'));
+    console.log(chalk.yellow('⚠️  AI features requested but no OpenAI API key found'));
     console.log('');
     console.log(chalk.white('To use AI-powered analysis, you need an OpenAI API key:'));
     console.log('');
     console.log(chalk.blue('Option 1:') + chalk.gray(' Set environment variable'));
-    console.log(chalk.gray('  export OPENAI_API_KEY="your-key-here"'));
+    console.log(chalk.gray('  export OPENAI_API_KEY="sk-your-openai-key-here"'));
     console.log('');
     console.log(chalk.blue('Option 2:') + chalk.gray(' Pass as parameter'));
-    console.log(chalk.gray('  mirror-web-cli <url> --ai --api-key "your-key-here"'));
+    console.log(chalk.gray('  mirror-web-cli <url> --ai --openai-key "sk-your-openai-key-here"'));
     console.log('');
-    console.log(chalk.blue('Get API key:') + chalk.gray(' https://platform.openai.com/api-keys'));
+    console.log(chalk.blue('Get OpenAI API key:') + chalk.gray(' https://platform.openai.com/api-keys'));
+    console.log('');
+    console.log(chalk.dim('Note: Only OpenAI API keys are supported for AI analysis'));
+    console.log(chalk.dim('Continuing without AI features...'));
+    console.log('');
+    return false;
+  }
+  
+  // Validate it looks like an OpenAI API key
+  if (!finalApiKey.startsWith('sk-')) {
+    console.log('');
+    console.log(chalk.yellow('⚠️  Invalid OpenAI API key format'));
+    console.log('');
+    console.log(chalk.white('OpenAI API keys must start with "sk-"'));
+    console.log(chalk.gray('Example: sk-proj-abc123...'));
+    console.log('');
+    console.log(chalk.blue('Get a valid OpenAI API key:') + chalk.gray(' https://platform.openai.com/api-keys'));
     console.log('');
     console.log(chalk.dim('Continuing without AI features...'));
     console.log('');
     return false;
   }
   
-  // Set the API key for the session
-  if (apiKey && !process.env.OPENAI_API_KEY) {
-    process.env.OPENAI_API_KEY = apiKey;
+  // Set the OpenAI API key for the session
+  if (openaiApiKey && !process.env.OPENAI_API_KEY) {
+    process.env.OPENAI_API_KEY = openaiApiKey;
   }
   
   return true;
@@ -69,8 +85,8 @@ program
   .argument('<url>', 'Target website URL to mirror (supports http/https)')
   .option('-o, --output <dir>', 'Custom output directory path (defaults to domain name)')
   .option('--clean', 'Remove tracking scripts, analytics, and third-party code', false)
-  .option('--ai', 'Enable AI-powered website analysis', false)
-  .option('--api-key <key>', 'OpenAI API key for AI features (or set OPENAI_API_KEY env var)')
+  .option('--ai', 'Enable AI-powered website analysis (requires OpenAI API key)', false)
+  .option('--openai-key <key>', 'OpenAI API key for AI features (or set OPENAI_API_KEY env var)')
   .option('--debug', 'Enable detailed debug logging and error traces', false)
   .option('--timeout <ms>', 'Browser page load timeout in milliseconds', '120000')
   .option('--headless <bool>', 'Run browser in headless mode (true/false)', 'true')
@@ -83,8 +99,8 @@ program
       
       new URL(url); // Validate URL format
       
-      // Validate AI setup and get final AI enabled status
-      const aiEnabled = validateAISetup(options.ai, options.apiKey);
+      // Validate OpenAI API key setup and get final AI enabled status
+      const aiEnabled = validateAISetup(options.ai, options.openaiKey);
       
       // Configure mirroring options
       const config = {
@@ -131,14 +147,15 @@ ${chalk.hex('#7c3aed').bold('USAGE EXAMPLES:')}
   ${chalk.gray('# Debug mode with detailed logging')}
   ${chalk.cyan('mirror-web-cli https://complex-site.com --debug')}
   
-  ${chalk.gray('# AI-powered analysis with API key')}
-  ${chalk.cyan('mirror-web-cli https://site.com --ai --api-key "sk-..."')}
+  ${chalk.gray('# AI-powered analysis with OpenAI API key')}
+  ${chalk.cyan('mirror-web-cli https://site.com --ai --openai-key "sk-..."')}
 
-${chalk.hex('#7c3aed').bold('AI FEATURES:')}
+${chalk.hex('#7c3aed').bold('AI FEATURES (OpenAI):')}
   ${chalk.green('•')} Set ${chalk.white('OPENAI_API_KEY')} environment variable (recommended)
-  ${chalk.green('•')} Or pass ${chalk.white('--api-key')} parameter for one-time use
-  ${chalk.green('•')} Get API key at ${chalk.blue('https://platform.openai.com/api-keys')}
-  ${chalk.green('•')} AI analysis provides enhanced framework detection and optimization
+  ${chalk.green('•')} Or pass ${chalk.white('--openai-key')} parameter for one-time use
+  ${chalk.green('•')} Get OpenAI API key at ${chalk.blue('https://platform.openai.com/api-keys')}
+  ${chalk.green('•')} AI analysis uses OpenAI GPT-4o for enhanced framework detection
+  ${chalk.green('•')} Only OpenAI API keys (starting with "sk-") are supported
 
 ${chalk.hex('#7c3aed').bold('FRAMEWORK SUPPORT:')}
   ${chalk.green('✓')} React/Next.js    ${chalk.gray('→ Preserves component structure')}
