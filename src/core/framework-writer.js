@@ -536,6 +536,63 @@ export class FrameworkWriter {
     return html;
   }
 
+  rewriteMicrolinkInJavaScript(jsContent) {
+    // Find microlink.io API constructions and replace with local image references
+    // This handles patterns like: "https://api.microlink.io/?" + query
+    let rewritten = jsContent;
+
+    // Pattern 1: Direct microlink API URL construction
+    rewritten = rewritten.replace(
+      /"https:\/\/api\.microlink\.io\/\?\+[^"]+/g,
+      (match) => {
+        // Try to find a corresponding local image based on teachyst.com pattern
+        if (match.includes('teachyst.com')) {
+          // Find the teachyst image in our assets
+          const teachystImage = this.cloner.assets.images.find(img => 
+            img.filename && img.filename.includes('teachyst')
+          );
+          if (teachystImage) {
+            return `"./assets/images/${teachystImage.filename}"`;
+          }
+        }
+        return match; // Keep original if no local replacement found
+      }
+    );
+
+    // Pattern 2: Template literal microlink construction
+    rewritten = rewritten.replace(
+      /`https:\/\/api\.microlink\.io\/\?\$\{[^}]+\}`/g,
+      (match) => {
+        if (match.includes('teachyst.com')) {
+          const teachystImage = this.cloner.assets.images.find(img => 
+            img.filename && img.filename.includes('teachyst')
+          );
+          if (teachystImage) {
+            return `"./assets/images/${teachystImage.filename}"`;
+          }
+        }
+        return match;
+      }
+    );
+
+    // Pattern 3: Variable concatenation: m="https://api.microlink.io/?".concat(d)
+    rewritten = rewritten.replace(
+      /"https:\/\/api\.microlink\.io\/\?"\.concat\([^)]+\)/g,
+      (match) => {
+        // Look for teachyst-related images
+        const teachystImage = this.cloner.assets.images.find(img => 
+          img.filename && img.filename.includes('teachyst')
+        );
+        if (teachystImage) {
+          return `"./assets/images/${teachystImage.filename}"`;
+        }
+        return match;
+      }
+    );
+
+    return rewritten;
+  }
+
   async downloadAssetsWithExactNames() {
     const axios = (await import('axios')).default;
 
@@ -639,12 +696,17 @@ export class FrameworkWriter {
         );
         try {
           const res = await axios.get(s.url, {
-            responseType: 'arraybuffer',
+            responseType: 'text', // Change to text to enable content processing
             timeout: 30000,
             headers: { 'User-Agent': 'Mozilla/5.0' },
           });
           await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data);
+          
+          // Rewrite microlink.io URLs in JavaScript content
+          let jsContent = res.data || '';
+          jsContent = this.rewriteMicrolinkInJavaScript(jsContent);
+          
+          await fs.writeFile(dest, jsContent, 'utf8');
         } catch (e) {
           this.cloner.logger.warnNonCritical('scripts', s.url, e);
         }
