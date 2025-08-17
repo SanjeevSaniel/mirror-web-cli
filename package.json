@@ -1,7 +1,7 @@
 {
   "name": "mirror-web-cli",
   "version": "1.0.0",
-  "description": "Professional website mirroring tool with intelligent framework preservation and comprehensive asset optimization",
+  "description": "Professional website mirroring tool with intelligent framework preservation, AI-powered analysis, and comprehensive asset optimization",
   "main": "src/core/mirror-cloner.js",
   "bin": {
     "mirror-web-cli": "./src/cli.js"
@@ -30,12 +30,17 @@
     "offline-website",
     "cli-tool",
     "web-development",
-    "static-site-generator"
+    "static-site-generator",
+    "ai-powered",
+    "openai",
+    "website-analysis",
+    "professional-tool"
   ],
   "author": {
     "name": "Sanjeev Saniel Kujur",
-    "email": "sanjeev@example.com",
-    "url": "https://github.com/SanjeevSaniel"
+    "email": "sanjeevsaniel@gmail.com",
+    "url": "https://github.com/SanjeevSaniel",
+    "npm": "sanjeevsaniel"
   },
   "license": "MIT",
   "engines": {
@@ -77,8 +82,8 @@
   "files": [
     "src/",
     "README.md",
-    "CLAUDE.md",
-    "LICENSE"
+    "LICENSE",
+    "IMPLEMENTATION.md"
   ],
   "preferGlobal": true,
   "os": [
