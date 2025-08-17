@@ -12,7 +12,7 @@
  * - TTY detection for optimal fallbacks
  * - Zero dependencies beyond chalk for colors
  * 
- * @version 1.0.0
+ * @version 1.0.2
  * @author Sanjeev Saniel Kujur
  * @license MIT
  */
@@ -82,20 +82,20 @@ export class Display {
   /**
    * @constructor
    * @param {Object} options - Configuration options for the display system
-   * @param {string} [options.version='v1.0'] - Version string to display in headers
+   * @param {string} [options.version='v1.0.2'] - Version string to display in headers
    * @param {boolean} [options.animations=true] - Enable/disable animations (auto-detected for TTY)
    * @param {number} [options.width] - Terminal width (auto-detected from process.stdout.columns)
    * @param {boolean} [options.compact=false] - Use compact layout mode
    */
   constructor(options = {}) {
     this.options = {
-      version: options.version || 'v1.0',
+      version: options.version || 'v1.0.2',
       animations: options.animations !== false, // animations on by default for TTY
       width: clamp(process.stdout.columns || 100, 60, 120),
       compact: !!options.compact,
       ...options,
     };
-    
+
     // Internal state for animation management
     this._spinnerTimer = null;
     this._spinnerFrame = 0;
