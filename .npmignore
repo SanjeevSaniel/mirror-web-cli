@@ -1,5 +1,6 @@
 # Development files
 .claude/
+.claude
 .git/
 .gitignore
 .env
@@ -8,6 +9,10 @@
 # Development documentation
 CLAUDE.local.md
 CLAUDE.md
+CLAUDE.*
+IMPLEMENTATION.md
+claude-*
+Claude-*
 
 # Test outputs and temporary files
 test-output/

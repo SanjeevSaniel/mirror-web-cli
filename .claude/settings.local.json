@@ -7,7 +7,8 @@
       "Bash(timeout:*)",
       "Bash(npm install)",
       "Bash(npm install:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm pack:*)"
     ],
     "additionalDirectories": [
       "D:\\d\\1A-Personal\\D-Learnings\\1-Projects"

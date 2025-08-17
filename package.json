@@ -82,8 +82,7 @@
   "files": [
     "src/",
     "README.md",
-    "LICENSE",
-    "IMPLEMENTATION.md"
+    "LICENSE"
   ],
   "preferGlobal": true,
   "os": [
