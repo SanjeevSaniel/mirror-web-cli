@@ -1,0 +1,61 @@
+# Development files
+.claude/
+.git/
+.gitignore
+.env
+.env.*
+
+# Development documentation
+CLAUDE.local.md
+CLAUDE.md
+
+# Test outputs and temporary files
+test-output/
+*.test/
+examples/
+benchmark/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Build outputs (if any)
+dist/
+build/
+
+# Temporary folders
+tmp/
+temp/

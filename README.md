@@ -38,9 +38,27 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 # Global installation (recommended)
 npm install -g mirror-web-cli
 
-# Or run directly with npx
+# Or run directly with npx (no installation required)
 npx mirror-web-cli https://example.com
 ```
+
+### OpenAI API Setup (Optional)
+
+For AI-powered website analysis, you'll need an **OpenAI API key**:
+
+```bash
+# Option 1: Set environment variable (recommended)
+export OPENAI_API_KEY="sk-proj-your-openai-key-here"
+
+# Option 2: Pass as parameter
+mirror-web-cli https://example.com --ai --openai-key "sk-proj-your-key-here"
+```
+
+**Requirements:**
+
+- Only **OpenAI API keys** are supported (must start with `sk-`)
+- Uses OpenAI GPT-4o model for intelligent analysis
+- **Get your API key**: [OpenAI Platform](https://platform.openai.com/api-keys)
 
 ### Basic Usage
 
@@ -142,13 +160,23 @@ Arguments:
 Options:
   -o, --output <dir>      Custom output directory (default: domain name)
   --clean                 Remove tracking scripts and analytics
-  --ai                    Enable AI-powered analysis (requires OPENAI_API_KEY)
+  --ai                    Enable AI-powered analysis (requires OpenAI API key)
+  --openai-key <key>      OpenAI API key for AI features (or set OPENAI_API_KEY env var)
   --debug                 Enable detailed debug logging
   --timeout <ms>          Page load timeout in milliseconds (default: 120000)
   --headless <bool>       Run browser in headless mode (default: true)
   -h, --help              Show help information
   -V, --version           Show version number
 ```
+
+### OpenAI API Key Priority
+
+The tool checks for OpenAI API keys in this order:
+
+1. `--openai-key` command line parameter
+2. `OPENAI_API_KEY` environment variable
+3. If neither is found, AI features are disabled with a helpful message
+4. Keys must start with `sk-` (validated automatically)
 
 ## 🏗️ Framework Support
 
@@ -196,6 +224,19 @@ mirror-web-cli https://nextjs-site.com -o ./my-nextjs-mirror
 # Complex site with lots of assets
 mirror-web-cli https://shop.example.com --debug --clean
 # → Detailed logging, removes analytics, preserves functionality
+```
+
+### AI-Powered Analysis (OpenAI)
+
+```bash
+# Using environment variable (recommended)
+export OPENAI_API_KEY="sk-proj-your-openai-key-here"
+mirror-web-cli https://complex-app.com --ai --clean
+# → OpenAI GPT-4o analyzes framework patterns and optimizes conversion strategy
+
+# Using command line parameter
+mirror-web-cli https://react-app.com --ai --openai-key "sk-proj-..." --clean
+# → One-time OpenAI API key usage for enhanced analysis
 ```
 
 ### Development Workflow
