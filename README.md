@@ -55,6 +55,7 @@ mirror-web-cli https://example.com --ai --openai-key "sk-proj-your-key-here"
 ```
 
 **Requirements:**
+
 - Only **OpenAI API keys** are supported (must start with `sk-`)
 - Uses OpenAI GPT-4o model for intelligent analysis
 - **Get your API key**: [OpenAI Platform](https://platform.openai.com/api-keys)
@@ -171,6 +172,7 @@ Options:
 ### OpenAI API Key Priority
 
 The tool checks for OpenAI API keys in this order:
+
 1. `--openai-key` command line parameter
 2. `OPENAI_API_KEY` environment variable
 3. If neither is found, AI features are disabled with a helpful message
