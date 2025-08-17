@@ -29,6 +29,7 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 - Optional tracking script removal (analytics, GTM, Facebook Pixel)
 - Professional project structure ready for development
 - Offline-ready websites with localized resources
+- **Next.js/React error handling** for graceful offline operation
 
 ## 🚀 Quick Start
 
