@@ -380,6 +380,37 @@ export class FrameworkWriter {
       $el.attr('srcset', updated);
     });
 
+    // imagesrcset handling (for <link rel="preload"> elements)
+    $('[imagesrcset]').each((_, el) => {
+      const $el = $(el);
+      const imagesrcset = $el.attr('imagesrcset');
+      if (!imagesrcset) return;
+
+      const updated = imagesrcset
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const parts = entry.split(/\s+/);
+          const url = parts[0];
+          const desc = parts.slice(1).join(' ');
+          if (!url) return entry;
+
+          if (url.includes('/_next/image')) {
+            const local = this.getLocalForNextImage(url);
+            if (local) return [local, desc].filter(Boolean).join(' ');
+          } else if (!url.startsWith('data:')) {
+            const abs = this.cloner.resolveUrl(url);
+            const local = this.ensureMappedImage(abs);
+            if (local) return [local, desc].filter(Boolean).join(' ');
+          }
+          return entry;
+        })
+        .join(', ');
+
+      $el.attr('imagesrcset', updated);
+    });
+
     // Posters
     $('video[poster]').each((_, el) => {
       const $el = $(el);
