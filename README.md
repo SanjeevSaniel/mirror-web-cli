@@ -151,6 +151,59 @@ website.com/
     └── media/         # Videos (.mp4, .webm, .ogg), audio files, and other media
 ```
 
+## Next.js + Microlink offline support (v1.0.2)
+
+Modern sites often use:
+
+- Next.js Image Optimizer: `/_next/image?url=<original>&w=<size>&q=<quality>`
+- Microlink-based previews: `https://api.microlink.io/?url=...` returning either JSON or direct images
+
+This tool:
+
+- Skips downloading `/_next/image` directly (avoids 402s)
+- Extracts the original image URL from the `url=` param and downloads that
+- Aliases `/_next/image?...` to the same local file as the original
+- Injects a runtime MutationObserver rewriter that:
+  - Rewrites `src`, `href`, `poster`, inline `style` background-image
+  - Rewrites `srcset` and `imagesrcset` (browsers prefer srcset over src)
+  - Handles dynamically added DOM (hover cards, popovers, etc.)
+- Captures Microlink responses; if JSON, follows to the actual screenshot URL and downloads bytes
+
+Verification
+
+- Run with `--debug` and open DevTools Console
+- Interact with the page (e.g., hover “Preview” links)
+- Look for lines like:
+
+  ```Plaintext
+  [MW rewrite] imagesrcset: /_next/image?url=... -> ./assets/images/asset_dc814d3448.png 1x, ...
+  ```
+- Open the local asset path (e.g., [http://localhost:8000/assets/images/asset_dc814d3448.png](http://localhost:8000/assets/images/asset_dc814d3448.png))
+
+### Troubleshooting (quick)
+
+- Blank hover/popover preview
+  - Serve over HTTP (not file://)
+  - Ensure `srcset`/`imagesrcset` are being rewritten (use `--debug`)
+  - Open the local asset URL from logs; if 404, rebuild the mirror
+
+- HTTP 402 from Next.js `/_next/image`
+  - Expected; the tool avoids these endpoints and downloads the original target from `url=`
+
+- Helpful snippet to locate candidates:
+
+  ```js
+  document.querySelectorAll('img, [style]').forEach(n => {
+    const src = n.currentSrc || n.getAttribute('src') || '';
+    const styleAttr = n.getAttribute('style') || '';
+    const bg = getComputedStyle(n).backgroundImage || '';
+    const hay = [src, styleAttr, bg].join(' ');
+    if (/(microlink|_next\/image|og|twitter|card)/i.test(hay)) {
+      console.log('el:', n, { src, styleAttr, bg });
+    }
+  });
+  ```
+
 ## 🔧 CLI Reference
 
 ```bash

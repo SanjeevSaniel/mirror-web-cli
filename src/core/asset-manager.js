@@ -47,14 +47,20 @@ export class AssetManager {
             continue;
           }
 
+          // Next.js optimizer: capture original (url=) and alias the _next/image to it.
+          if (val.includes('/_next/image')) {
+            this.captureNextImagePair(val);
+            continue;
+          }
+
+          // Microlink endpoints should be treated as images (even if no extension)
+          if (this.isMicrolinkUrl(val)) {
+            this.addImageAsset(val);
+            continue;
+          }
+
           if (this.isValidImageUrl(val)) {
-            if (val.includes('/_next/image')) {
-              const originalUrl = this.extractNextImageOriginalUrl(val);
-              if (originalUrl) this.addImageAsset(originalUrl);
-              this.addImageAsset(val); // track optimized too
-            } else {
-              this.addImageAsset(val);
-            }
+            this.addImageAsset(val);
           }
         }
       },
@@ -78,14 +84,18 @@ export class AssetManager {
           continue;
         }
 
+        if (url.includes('/_next/image')) {
+          this.captureNextImagePair(url);
+          continue;
+        }
+
+        if (this.isMicrolinkUrl(url)) {
+          this.addImageAsset(url);
+          continue;
+        }
+
         if (this.isValidImageUrl(url)) {
-          if (url.includes('/_next/image')) {
-            const originalUrl = this.extractNextImageOriginalUrl(url);
-            if (originalUrl) this.addImageAsset(originalUrl);
-            this.addImageAsset(url);
-          } else {
-            this.addImageAsset(url);
-          }
+          this.addImageAsset(url);
         }
       }
     });
@@ -107,7 +117,15 @@ export class AssetManager {
           this.processDataURLImage(raw, 'style', 'background');
           continue;
         }
-        if (this.isValidImageUrl(raw)) this.addImageAsset(raw);
+
+        if (raw.includes('/_next/image')) {
+          this.captureNextImagePair(raw);
+          continue;
+        }
+
+        if (this.isMicrolinkUrl(raw) || this.isValidImageUrl(raw)) {
+          this.addImageAsset(raw);
+        }
       }
     });
 
@@ -123,7 +141,44 @@ export class AssetManager {
         this.processDataURLImage(href, 'svg', 'href');
         return;
       }
-      if (this.isValidImageUrl(href)) this.addImageAsset(href);
+      if (href.includes('/_next/image')) {
+        this.captureNextImagePair(href);
+        return;
+      }
+      if (this.isMicrolinkUrl(href) || this.isValidImageUrl(href)) {
+        this.addImageAsset(href);
+      }
+    });
+  }
+
+  // Store a single image asset for the original URL and remember the Next.js optimized URL as an alias.
+  captureNextImagePair(nextUrl) {
+    const originalUrl = this.extractNextImageOriginalUrl(nextUrl);
+    if (!originalUrl) {
+      // fallback to tracking the _next/image if we cannot parse url=
+      this.addImageAsset(nextUrl);
+      return;
+    }
+
+    const absOriginal = this.cloner.resolveUrl(originalUrl);
+    const absNext = this.cloner.resolveUrl(nextUrl);
+
+    if (this.processedUrls.has(absOriginal)) {
+      // attach alias if this original is already tracked
+      const entry = this.cloner.assets.images.find(
+        (x) => x.url === absOriginal,
+      );
+      if (entry && !entry.nextJsUrl) entry.nextJsUrl = absNext;
+      return;
+    }
+
+    this.processedUrls.add(absOriginal);
+    const filename = this.cloner.generateFilename(absOriginal, 'images');
+    this.cloner.assets.images.push({
+      url: absOriginal,
+      filename,
+      nextJsUrl: absNext,
+      local: false,
     });
   }
 
@@ -176,6 +231,19 @@ export class AssetManager {
       return originalUrl ? decodeURIComponent(originalUrl) : null;
     } catch {
       return null;
+    }
+  }
+
+  // Microlink endpoint check: api.microlink.io or image.microlink.io
+  isMicrolinkUrl(url) {
+    try {
+      const abs = this.cloner.resolveUrl(url);
+      const host = new URL(abs).hostname.toLowerCase();
+      return (
+        host.endsWith('api.microlink.io') || host.endsWith('image.microlink.io')
+      );
+    } catch {
+      return /(?:^|\/)(?:api|image)\.microlink\.io/i.test(String(url));
     }
   }
 
@@ -280,17 +348,13 @@ export class AssetManager {
   }
 
   async extractMedia($) {
-    // Extract video sources from <video> tags and their <source> children
+    // Extract video sources from <video> and <source>
     $('video').each((_, videoEl) => {
       const $video = $(videoEl);
-      
-      // Direct video src attribute
       const src = $video.attr('src');
       if (src && !src.startsWith('data:') && this.isValidVideoUrl(src)) {
         this.addMediaAsset(src, 'video');
       }
-      
-      // Video poster images
       const poster = $video.attr('poster');
       if (poster && !poster.startsWith('data:')) {
         const abs = this.cloner.resolveUrl(poster);
@@ -303,49 +367,45 @@ export class AssetManager {
           local: false,
         });
       }
-      
-      // Source elements within video
       $video.find('source[src]').each((_, sourceEl) => {
         const sourceSrc = $(sourceEl).attr('src');
-        if (sourceSrc && !sourceSrc.startsWith('data:') && this.isValidVideoUrl(sourceSrc)) {
+        if (
+          sourceSrc &&
+          !sourceSrc.startsWith('data:') &&
+          this.isValidVideoUrl(sourceSrc)
+        ) {
           this.addMediaAsset(sourceSrc, 'video');
         }
       });
     });
 
-    // Extract audio sources
     $('audio').each((_, audioEl) => {
       const $audio = $(audioEl);
-      
-      // Direct audio src attribute
       const src = $audio.attr('src');
       if (src && !src.startsWith('data:') && this.isValidAudioUrl(src)) {
         this.addMediaAsset(src, 'audio');
       }
-      
-      // Source elements within audio
       $audio.find('source[src]').each((_, sourceEl) => {
         const sourceSrc = $(sourceEl).attr('src');
-        if (sourceSrc && !sourceSrc.startsWith('data:') && this.isValidAudioUrl(sourceSrc)) {
+        if (
+          sourceSrc &&
+          !sourceSrc.startsWith('data:') &&
+          this.isValidAudioUrl(sourceSrc)
+        ) {
           this.addMediaAsset(sourceSrc, 'audio');
         }
       });
     });
 
-    // Standalone source elements (less common but possible)
     $('source[src]').each((_, el) => {
       const src = $(el).attr('src');
       if (!src || src.startsWith('data:')) return;
-
       const type = $(el).attr('type') || '';
       let mediaType = 'media';
-      
-      if (type.startsWith('video/') || this.isValidVideoUrl(src)) {
+      if (type.startsWith('video/') || this.isValidVideoUrl(src))
         mediaType = 'video';
-      } else if (type.startsWith('audio/') || this.isValidAudioUrl(src)) {
+      else if (type.startsWith('audio/') || this.isValidAudioUrl(src))
         mediaType = 'audio';
-      }
-      
       if (this.isValidVideoUrl(src) || this.isValidAudioUrl(src)) {
         this.addMediaAsset(src, mediaType);
       }
@@ -368,15 +428,22 @@ export class AssetManager {
 
   isValidVideoUrl(url) {
     if (!url || typeof url !== 'string') return false;
-    
     const videoExtensions = [
-      '.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', 
-      '.flv', '.mkv', '.m4v', '.3gp', '.ogv'
+      '.mp4',
+      '.webm',
+      '.ogg',
+      '.avi',
+      '.mov',
+      '.wmv',
+      '.flv',
+      '.mkv',
+      '.m4v',
+      '.3gp',
+      '.ogv',
     ];
     const clean = url.split('?')[0].split('#')[0].toLowerCase();
-    
     return (
-      videoExtensions.some(ext => clean.endsWith(ext)) ||
+      videoExtensions.some((ext) => clean.endsWith(ext)) ||
       clean.includes('/video/') ||
       clean.includes('/videos/') ||
       clean.includes('video=') ||
@@ -387,15 +454,20 @@ export class AssetManager {
 
   isValidAudioUrl(url) {
     if (!url || typeof url !== 'string') return false;
-    
     const audioExtensions = [
-      '.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', 
-      '.wma', '.opus', '.oga'
+      '.mp3',
+      '.wav',
+      '.ogg',
+      '.aac',
+      '.flac',
+      '.m4a',
+      '.wma',
+      '.opus',
+      '.oga',
     ];
     const clean = url.split('?')[0].split('#')[0].toLowerCase();
-    
     return (
-      audioExtensions.some(ext => clean.endsWith(ext)) ||
+      audioExtensions.some((ext) => clean.endsWith(ext)) ||
       clean.includes('/audio/') ||
       clean.includes('/sounds/') ||
       clean.includes('audio=')
@@ -405,8 +477,8 @@ export class AssetManager {
   isValidImageUrl(url) {
     if (!url || typeof url !== 'string') return false;
     if (url.startsWith('data:image/')) return true;
-    if (url.includes('/_next/image')) return true;
-
+    if (this.isMicrolinkUrl(url)) return true; // Microlink preview endpoints
+    // We no longer blanket-accept /_next/image here; it is handled by captureNextImagePair
     const imageExtensions = [
       '.jpg',
       '.jpeg',

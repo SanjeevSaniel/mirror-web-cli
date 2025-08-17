@@ -1,14 +1,7 @@
 /**
  * @fileoverview MirrorCloner - Core Website Mirroring Engine
- * @description The main class responsible for orchestrating the complete website mirroring process.
- * This includes browser automation, framework detection, asset extraction, and output generation.
- * 
- * The MirrorCloner preserves the original framework structure while creating a complete
- * offline-ready version of any website with comprehensive asset optimization.
- * 
- * @version 1.0.0
- * @author Sanjeev Saniel Kujur
- * @license MIT
+ * @description Orchestrates mirroring: browser automation, framework detection, asset extraction, output.
+ * @version 1.0.1
  */
 
 import { BrowserEngine } from './browser-engine.js';
@@ -21,41 +14,7 @@ import chalk from 'chalk';
 import { load } from 'cheerio';
 import { makeAssetFilename } from './filename-utils.js';
 
-/**
- * @class MirrorCloner
- * @description Main orchestrator class for website mirroring operations.
- * 
- * This class coordinates all aspects of the mirroring process:
- * - Browser automation and page loading
- * - Framework detection and analysis
- * - Asset extraction and optimization
- * - Content processing and cleaning
- * - Output generation with proper structure
- * 
- * @example
- * ```javascript
- * const cloner = new MirrorCloner('https://example.com', {
- *   outputDir: './output',
- *   clean: true,
- *   debug: false
- * });
- * const success = await cloner.clone();
- * ```
- */
 export class MirrorCloner {
-  /**
-   * @constructor
-   * @param {string} url - The target website URL to mirror
-   * @param {Object} options - Configuration options for the mirroring process
-   * @param {string} [options.outputDir] - Output directory path (defaults to domain name)
-   * @param {boolean} [options.debug=false] - Enable debug logging
-   * @param {boolean} [options.clean=false] - Remove tracking scripts and analytics
-   * @param {number} [options.timeout=120000] - Page load timeout in milliseconds
-   * @param {boolean} [options.headless=true] - Run browser in headless mode
-   * @param {boolean} [options.quiet=false] - Suppress non-essential output
-   * @param {boolean} [options.suppressWarnings=true] - Suppress warning messages
-   * @param {boolean} [options.ai=false] - Enable AI-powered analysis
-   */
   constructor(url, options = {}) {
     this.url = url;
     this.baseUrl = new URL(url);
@@ -98,23 +57,12 @@ export class MirrorCloner {
     };
 
     this.frameworkData = {}; // Framework-specific data storage
+
+    // Microlink capture helpers
+    this._microlinkHandlers = { response: null };
+    this._microlinkCaptured = new Set();
   }
 
-  /**
-   * @method clone
-   * @description Main entry point for the website mirroring process.
-   * Orchestrates all steps from initial page load to final output generation.
-   * 
-   * The process follows these key steps:
-   * 1. Browser setup and page loading
-   * 2. Framework detection and analysis
-   * 3. Comprehensive asset extraction
-   * 4. Content processing and optimization
-   * 5. Output generation with proper structure
-   * 
-   * @returns {Promise<boolean>} - Returns true if mirroring succeeded, false otherwise
-   * @throws {Error} - Throws on critical failures like network issues or invalid URLs
-   */
   async clone() {
     const startTime = Date.now();
 
@@ -131,6 +79,9 @@ export class MirrorCloner {
       this.display.step(1, 7, 'Browser Setup', 'Launching headless browser...');
       const page = await this.browserEngine.createPage();
 
+      // Attach Microlink sniffer BEFORE navigation to capture preview assets as they load
+      this.attachMicrolinkSniffer(page);
+
       // Step 2: Load and process target website
       this.display.step(
         2,
@@ -139,6 +90,18 @@ export class MirrorCloner {
         'Loading website content and waiting for completion...',
       );
       await this.loadPage(page);
+
+      // Simulate link preview hovers (e.g., "Teachyst") so previews render in DOM and network calls are made
+      await this.simulateLinkPreviews(page).catch(() => {});
+      await this.waitForNetworkIdle(page, 1200).catch(() => {});
+      await this.waitForImagesSettled(page, 4000).catch(() => {});
+
+      // Harvest computed-style assets (background images, pseudo-elements) into the DOM
+      await this.collectComputedAssets(page).catch(() => {});
+      await this.waitForNetworkIdle(page, 1000).catch(() => {});
+
+      // Detach sniffer now that previews have had a chance to load
+      this.detachMicrolinkSniffer(page);
 
       // Handle URL redirects and update internal references
       const finalUrl = page.url();
@@ -163,7 +126,12 @@ export class MirrorCloner {
       this.displayFrameworkResults();
 
       // Step 4: Extract all website assets
-      this.display.step(4, 7, 'Asset Extraction', 'Downloading and processing assets...');
+      this.display.step(
+        4,
+        7,
+        'Asset Extraction',
+        'Downloading and processing assets...',
+      );
       this.$ = load(html);
       await this.assetManager.extractAllAssets();
 
@@ -230,6 +198,228 @@ export class MirrorCloner {
     await this.scrollToBottomAndLoad(page);
     await this.waitForImagesSettled(page, 8000);
     await this.waitForNetworkIdle(page, 1500).catch(() => {});
+  }
+
+  // Network sniffer for Microlink assets (images and JSON to discover screenshot URLs)
+  attachMicrolinkSniffer(page) {
+    const isMicrolink = (u) => {
+      try {
+        const host = new URL(u).hostname.toLowerCase();
+        return host.endsWith('microlink.io');
+      } catch {
+        return /microlink\.io/i.test(String(u));
+      }
+    };
+    const handler = async (response) => {
+      try {
+        const u = response.url();
+        if (!isMicrolink(u)) return;
+
+        const status = response.status();
+        const headers = response.headers() || {};
+        const ctype = String(headers['content-type'] || '').toLowerCase();
+        if (status < 200 || status >= 300) return;
+
+        if (this._microlinkCaptured.has(u)) return;
+        this._microlinkCaptured.add(u);
+
+        if (ctype.startsWith('image/')) {
+          // Direct image payload; store as buffer now
+          const buf = await response.buffer().catch(() => null);
+          if (!buf || !buf.length) return;
+          const filename = this.generateFilename(u, 'images');
+          this.assets.images.push({
+            url: u,
+            filename,
+            buffer: buf,
+            local: true,
+          });
+          if (this.options.debug) {
+            console.log(chalk.gray(`    ⤵︎ Captured Microlink image: ${u}`));
+          }
+          return;
+        }
+
+        // JSON payload: try to extract the actual screenshot/image url
+        if (ctype.includes('application/json')) {
+          const text = await response.text().catch(() => '');
+          if (!text) return;
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            return;
+          }
+          const target =
+            data?.data?.image?.url ||
+            data?.data?.screenshot?.url ||
+            data?.data?.thumbnail?.url ||
+            data?.image?.url ||
+            data?.screenshot?.url ||
+            null;
+
+          if (target) {
+            // Queue this target image for normal download later
+            const abs = this.resolveUrl(target);
+            const filename = this.generateFilename(abs, 'images');
+            if (!this.assets.images.find((x) => x.url === abs)) {
+              this.assets.images.push({
+                url: abs,
+                filename,
+                local: false,
+              });
+              if (this.options.debug) {
+                console.log(
+                  chalk.gray(
+                    `    ⤵︎ Discovered Microlink target image: ${abs}`,
+                  ),
+                );
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+    page.on('response', handler);
+    this._microlinkHandlers.response = handler;
+  }
+
+  detachMicrolinkSniffer(page) {
+    if (this._microlinkHandlers.response) {
+      page.off('response', this._microlinkHandlers.response);
+      this._microlinkHandlers.response = null;
+    }
+  }
+
+  // Hover/link-preview simulator to surface dynamic hovercards/popovers into the DOM
+  async simulateLinkPreviews(page) {
+    try {
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      // Specifically target "Teachyst" anchors if present
+      const teachystHandles = await page.$x(
+        "//a[contains(., 'Teachyst') or contains(@href, 'teachyst')]",
+      );
+      for (const h of teachystHandles) {
+        try {
+          await h.evaluate((el) =>
+            el.scrollIntoView({ block: 'center', inline: 'center' }),
+          );
+          await page.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const opts = {
+              bubbles: true,
+              cancelable: true,
+              clientX: r.left + 4,
+              clientY: r.top + 4,
+            };
+            el.dispatchEvent(new MouseEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseover', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+          }, h);
+          await h.hover();
+          await page.waitForTimeout(700);
+        } catch {}
+      }
+
+      // Generic hover triggers (limited count)
+      const selectors = [
+        '[data-hovercard]',
+        '[data-popover]',
+        '[data-tooltip]',
+        '[data-trigger="hover"]',
+        '[role="tooltip"]',
+        'a',
+      ];
+      const handles = await page.$$(selectors.join(','));
+      let count = 0;
+      for (const h of handles) {
+        if (count++ >= 30) break;
+        try {
+          await h.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0)
+              el.scrollIntoView({ block: 'center', inline: 'center' });
+          });
+          await h.hover();
+          await page.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const opts = {
+              bubbles: true,
+              cancelable: true,
+              clientX: r.left + 2,
+              clientY: r.top + 2,
+            };
+            el.dispatchEvent(new MouseEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseover', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+          }, h);
+          await Promise.race([
+            page
+              .waitForResponse((r) => /microlink\.io/.test(r.url()), {
+                timeout: 1200,
+              })
+              .catch(() => {}),
+            page.waitForTimeout(180),
+          ]);
+        } catch {}
+      }
+    } catch {
+      // ignore failures
+    }
+  }
+
+  // Collect computed-style url(...) assets and inject hidden <img> so the snapshot includes them
+  async collectComputedAssets(page) {
+    await page.evaluate(() => {
+      function extractUrls(val) {
+        if (!val || typeof val !== 'string') return [];
+        const urls = [];
+        const re = /url\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+        let m;
+        while ((m = re.exec(val)) !== null) urls.push(m[1]);
+        return urls;
+      }
+      function collect(el, out) {
+        const cs = window.getComputedStyle(el);
+        [
+          'backgroundImage',
+          'background',
+          'maskImage',
+          'WebkitMaskImage',
+          'borderImageSource',
+          'listStyleImage',
+        ].forEach((p) => extractUrls(cs[p]).forEach((u) => out.add(u)));
+        const before = window.getComputedStyle(el, '::before');
+        const after = window.getComputedStyle(el, '::after');
+        [before, after].forEach((ps) => {
+          extractUrls(ps.content).forEach((u) => out.add(u));
+          extractUrls(ps.backgroundImage).forEach((u) => out.add(u));
+        });
+        if (el.shadowRoot) {
+          el.shadowRoot.querySelectorAll('img[src]').forEach((img) => {
+            const s = img.getAttribute('src');
+            if (s) out.add(s);
+          });
+        }
+      }
+      const urls = new Set();
+      document.querySelectorAll('*').forEach((el) => collect(el, urls));
+      urls.forEach((u) => {
+        if (!u || String(u).startsWith('data:')) return;
+        const img = document.createElement('img');
+        img.setAttribute('data-mw-computed', '1');
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.alt = '';
+        img.src = u;
+        img.style.cssText =
+          'display:none !important;width:0;height:0;opacity:0;';
+        document.body.appendChild(img);
+      });
+    });
   }
 
   async waitForRootReady(page) {

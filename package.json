@@ -1,6 +1,6 @@
 {
   "name": "mirror-web-cli",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Professional website mirroring tool with intelligent framework preservation, AI-powered analysis, and comprehensive asset optimization",
   "main": "src/core/mirror-cloner.js",
   "bin": {
