@@ -20,9 +20,10 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 
 ⚡ **Advanced Asset Processing**
 
-- Complete asset extraction and optimization
+- Complete asset extraction and optimization (images, CSS, JS, fonts, icons, **videos**)
 - Smart URL rewriting for offline functionality
 - Framework-preserving structure generation
+- **Comprehensive video support** with 14+ video formats (.mp4, .webm, .ogg, etc.)
 
 🧹 **Clean Code Generation**
 
@@ -122,7 +123,7 @@ python -m http.server 8000
 ├── ⚙️  Scripts    → External JS + inline scripts (with optional cleaning)
 ├── 🔠 Fonts      → Web fonts and icon fonts
 ├── 🎭 Icons      → Favicons and app icons
-└── 🎥 Media      → Videos, audio, and other media files
+└── 🎥 Media      → Videos (.mp4, .webm, .ogg, .avi, .mov, etc.), audio files
 ```
 
 ### 4. **Smart URL Rewriting**
@@ -147,7 +148,7 @@ website.com/
     ├── js/            # JavaScript files (cleaned if --clean)
     ├── fonts/         # Web fonts and typography
     ├── icons/         # Favicons and app icons
-    └── media/         # Videos and other media
+    └── media/         # Videos (.mp4, .webm, .ogg), audio files, and other media
 ```
 
 ## 🔧 CLI Reference
@@ -247,6 +248,21 @@ mirror-web-cli https://react-app.com --ai --openai-key "sk-proj-..." --clean
 mirror-web-cli https://design-system.com -o ./reference
 cd ./reference
 npm start  # Built-in development server
+```
+
+### Video-Rich Websites
+
+```bash
+# Websites with hero videos (like VS Code, Apple, etc.)
+mirror-web-cli https://code.visualstudio.com --clean
+# → Downloads all video formats (.mp4, .webm), preserves video posters
+# → Handles responsive video sources with media queries
+# → Supports autoplay, muted, and poster attributes
+
+# Complex video embedding
+mirror-web-cli https://video-heavy-site.com --timeout 180000
+# → Extended timeout for large video downloads
+# → Maintains video element structure and JavaScript controls
 ```
 
 ## 🎨 Terminal UI Showcase

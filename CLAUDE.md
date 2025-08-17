@@ -14,6 +14,7 @@ Mirror Web CLI v1.0 is a **professional website mirroring tool** with intelligen
 - **🔧 Professional Code Organization**: Well-structured modular architecture with clear separation of concerns
 - **📦 Complete Package Metadata**: Version 1.0.0 with comprehensive npm package configuration and platform support
 - **🛡️ Security & Privacy**: Advanced tracking removal with comprehensive database of analytics and monitoring scripts
+- **🎥 Advanced Video Support**: Comprehensive video and audio handling with 14+ formats, extended timeouts, and proper URL rewriting
 
 ## Common Commands
 
@@ -54,6 +55,9 @@ node src/cli.js https://vue-app.com --ai --clean
 
 # Complex site with extended timeout
 node src/cli.js https://complex-site.com --timeout 180000 --debug
+
+# Video-rich websites (VS Code, Apple, etc.)
+node src/cli.js https://code.visualstudio.com --clean
 ```
 
 ## Core Architecture
@@ -85,10 +89,13 @@ node src/cli.js https://complex-site.com --timeout 180000 --debug
    - **Extensible Architecture**: Pattern-based system for easy framework additions
 
 3. **AssetManager**: Comprehensive asset extraction and processing
-   - Handles all asset types: images, stylesheets, scripts, fonts, icons, media
-   - Smart URL rewriting for offline functionality
-   - Intelligent filename generation with hashing and proper extensions
-   - Configurable tracking script removal with extensive database
+   - Handles all asset types: images, stylesheets, scripts, fonts, icons, **videos, audio**
+   - **Advanced Video Support**: 14+ formats (.mp4, .webm, .ogg, .avi, .mov, .wmv, .flv, .mkv, .m4v, .3gp, .ogv)
+   - **Audio Support**: 9+ formats (.mp3, .wav, .ogg, .aac, .flac, .m4a, .wma, .opus, .oga)
+   - **Smart URL rewriting** for offline functionality including video sources
+   - **Intelligent filename generation** with hashing and proper extensions
+   - **Configurable tracking script removal** with extensive database
+   - **Video-specific processing**: Poster image extraction, source element handling, extended timeouts
 
 4. **Display**: Modern terminal UI system
    - **Professional Design**: Modern gradients and typography inspired by shadcn/ui
@@ -138,6 +145,112 @@ export OPENAI_API_KEY="your-api-key-here"
 
 - **gpt-4o**: For website analysis and asset optimization
 - Temperature: 0.1 for consistent, logical reasoning
+
+## Video & Media Handling Implementation
+
+### Video Asset Extraction (AssetManager)
+
+The video handling system is implemented in `src/core/asset-manager.js` with comprehensive support:
+
+**Video Extraction Process:**
+
+1. **Direct Video Sources**: Extracts `src` attributes from `<video>` elements
+2. **Source Elements**: Processes `<source>` children within `<video>` tags
+3. **Poster Images**: Automatically extracts and links video poster images
+4. **Audio Support**: Similar processing for `<audio>` elements and sources
+5. **Format Detection**: Intelligent detection of 14+ video and 9+ audio formats
+
+**Supported Video Formats:**
+
+```javascript
+const videoExtensions = [
+  '.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', 
+  '.flv', '.mkv', '.m4v', '.3gp', '.ogv'
+];
+```
+
+**Supported Audio Formats:**
+
+```javascript
+const audioExtensions = [
+  '.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', 
+  '.wma', '.opus', '.oga'
+];
+```
+
+### Video Download & Processing (FrameworkWriter)
+
+**Enhanced Download System:**
+
+- **Extended Timeouts**: 2 minutes for videos, 1 minute for audio (vs 45 seconds for other assets)
+- **Progress Tracking**: Individual video download progress with file sizes
+- **Format-Specific Headers**: Optimized accept headers for video/audio content
+- **Error Handling**: Graceful fallbacks for failed video downloads
+- **Organized Output**: Separate processing for videos, audio, and other media
+
+**Download Configuration:**
+
+```javascript
+const timeout = mediaType === 'video' ? 120000 : 60000; // Extended timeouts
+const headers = {
+  'Accept': mediaType === 'video' 
+    ? 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5'
+    : 'audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,*/*;q=0.5'
+};
+```
+
+### Video URL Rewriting
+
+**Critical Fix Implemented:**
+
+The framework-writer now properly rewrites video source URLs:
+
+```javascript
+// Video and Audio sources
+$('video[src], audio[src], source[src]').each((_, el) => {
+  const $el = $(el);
+  const src = $el.attr('src');
+  if (!src || src.startsWith('data:')) return;
+  
+  const abs = this.cloner.resolveUrl(src);
+  if (this.assetMappings.has(abs)) {
+    const local = this.assetMappings.get(abs);
+    $el.attr('src', local); // Rewrites to ./assets/media/filename
+  }
+});
+```
+
+**Before Fix:**
+```html
+<source src="/assets/home/hero-dark-lg.webm" type="video/webm">
+```
+
+**After Fix:**
+```html
+<source src="./assets/media/hero-dark-lg_229cf5f509.webm" type="video/webm">
+```
+
+### Real-World Test Case: VS Code Website
+
+**Successfully handles:**
+- 8 video files (113MB total)
+- Multiple formats (.mp4, .webm) 
+- Responsive video sources with media queries
+- Poster images automatically extracted
+- Complex video controls and JavaScript preserved
+
+**Example Output Structure:**
+```
+assets/media/
+├── hero-dark-lg_074ae2ca66.mp4     (23.7MB)
+├── hero-dark-lg_229cf5f509.webm    (6.1MB)
+├── hero-dark-sm_a61b580e1f.mp4     (21.8MB)
+├── hero-dark-sm_2add821906.webm    (2.7MB)
+├── hero-light-lg_8ffb5fcc0e.mp4    (26.0MB)
+├── hero-light-lg_ba3e75ac69.webm   (7.0MB)
+├── hero-light-sm_e674932e7a.mp4    (23.7MB)
+└── hero-light-sm_569a5d92c0.webm   (3.0MB)
+```
 
 ## Code Patterns
 
