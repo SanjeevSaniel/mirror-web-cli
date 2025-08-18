@@ -4,17 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Web CLI v1.0 is a **professional website mirroring tool** with intelligent framework preservation capabilities. The tool features **comprehensive framework detection**, **beautiful modern terminal UI**, and **advanced asset optimization** for creating offline-ready websites.
+Mirror Web CLI v1.1.3 is a **professional website mirroring tool** with intelligent framework preservation capabilities. The tool features **comprehensive framework detection**, **beautiful modern terminal UI**, and **advanced asset optimization** for creating offline-ready websites.
 
-### ✨ **Version 1.0 - Production Ready Release**
+### ✨ **Version 1.1.3 - Enhanced Production Release**
 
 - **🎯 Comprehensive JSDoc Documentation**: All modules fully documented with detailed API documentation, examples, and usage patterns
 - **🎨 Modern Terminal UI**: Professional gradient-based interface with progress tracking, animated spinners, and status cards
 - **⚡ Enhanced Framework Detection**: Supports 14+ frameworks with intelligent pattern matching and confidence scoring
 - **🔧 Professional Code Organization**: Well-structured modular architecture with clear separation of concerns
-- **📦 Complete Package Metadata**: Version 1.0.0 with comprehensive npm package configuration and platform support
+- **📦 Complete Package Metadata**: Version 1.1.3 with comprehensive npm package configuration and platform support
 - **🛡️ Security & Privacy**: Advanced tracking removal with comprehensive database of analytics and monitoring scripts
 - **🎥 Advanced Video Support**: Comprehensive video and audio handling with 14+ formats, extended timeouts, and proper URL rewriting
+- **🔧 Enhanced Environment Variable Loading**: Priority-based .env loading with shell environment preservation
+- **🚀 Next.js Image Optimizer Support**: Robust handling of Next.js image optimization endpoints with runtime asset rewriting
+- **🎯 Runtime Asset Rewriter**: DOM mutation observer for dynamic content and hover/popover asset capture
+- **📊 Microlink Integration**: Support for Microlink screenshot services and JSON endpoint resolution
 
 ## Common Commands
 
@@ -662,6 +666,64 @@ node demo-claude-style.js
 ```
 
 This showcases all available animations with exact Claude Code styling and timing.
+
+## Latest Improvements (v1.1.3)
+
+### Enhanced Environment Variable Loading System
+
+**Priority-based Environment Loading** (`src/cli.js:25-48`):
+- **Shell Environment**: Highest priority (preserves existing shell variables)
+- **.env.local**: Overrides `.env` values but not shell variables
+- **.env**: Base configuration (lowest priority)
+
+```javascript
+// Enhanced environment loading with priority preservation
+function loadEnvWithPriority() {
+  const preexisting = new Set(Object.keys(process.env));
+  
+  // Load base .env (lowest priority)
+  dotenv.config({ path: '.env', override: false });
+  
+  // Load .env.local, but preserve shell variables
+  if (fs.existsSync('.env.local')) {
+    const parsed = dotenv.parse(fs.readFileSync('.env.local'));
+    for (const [k, v] of Object.entries(parsed)) {
+      if (preexisting.has(k)) continue; // preserve shell vars
+      process.env[k] = v;
+    }
+  }
+}
+```
+
+### Next.js Image Optimizer Handling
+
+**Robust Next.js Image Processing** (`src/core/asset-manager.js:50-54`):
+- **Automatic Detection**: Identifies `/_next/image` optimizer URLs
+- **Original Image Extraction**: Parses `url=` parameter to get source image
+- **Alias System**: Maps optimizer URLs to original files for offline compatibility
+- **HTTP 402 Avoidance**: Skips direct downloads of optimizer endpoints
+
+### Runtime Asset Rewriter System
+
+**Dynamic Asset Rewriting** (from CHANGELOG.md):
+- **DOM Mutation Observer**: Monitors dynamic content changes
+- **Comprehensive URL Rewriting**: Handles `src`, `href`, `poster`, `style` background-image
+- **Responsive Image Support**: Rewrites `srcset` and `imagesrcset` attributes
+- **Hover/Popover Content**: Captures dynamic preview content that appears on interaction
+
+### Microlink Integration
+
+**Microlink Screenshot Support**:
+- **JSON Endpoint Resolution**: Follows Microlink API to actual screenshot URLs
+- **Automatic Image Capture**: Downloads final image bytes for offline use
+- **Indirection Handling**: Resolves complex URL chains to final resources
+
+### Automatic JavaScript Mode Selection
+
+**Intelligent JS Handling** (`src/core/mirror-cloner.js:26-44`):
+- **Auto Mode**: Engine automatically decides JavaScript ON/OFF based on framework
+- **Preflight Analysis**: Determines optimal strategy before processing
+- **Framework-Specific Logic**: Different handling for React/Next.js vs static sites
 
 ## Troubleshooting
 
