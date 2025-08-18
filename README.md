@@ -69,7 +69,7 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 
 ## 🎥 Demo Video
 
-Watch the tool in action: **[YouTube Demo](https://youtu.be/2heXC3K13Dk)** - Complete walkthrough of features, installation, and real-world usage examples.
+Watch the tool in action: **[YouTube Demo](https://youtu.be/2heXC3K13Dk)**.
 
 ## 🚀 Quick Start
 
