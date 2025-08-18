@@ -38,26 +38,143 @@ npm run lint
 npm run demo
 ```
 
-### CLI Usage Examples
+## CLI Syntax & Usage Patterns
+
+### Complete CLI Syntax
 
 ```bash
-# Mirror any website with framework preservation
+node src/cli.js <url> [options]
+```
+
+### Command Line Options
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `<url>` | string | **Required** - Website URL to mirror | - |
+| `-o, --output` | string | Output directory for mirrored files | `./domain-standard` or `./domain-ai-enhanced` |
+| `--clean` | boolean | Remove tracking scripts and analytics | `false` |
+| `--ai` | boolean | Enable AI-powered analysis (requires OpenAI API key) | `false` |
+| `--debug` | boolean | Enable detailed logging and debug information | `false` |
+| `--timeout` | number | Timeout in milliseconds for page loading | `120000` (2 min) |
+| `--help` | boolean | Display help information | - |
+| `--version` | boolean | Display version information | - |
+
+### Output Directory Naming
+
+Mirror Web CLI automatically differentiates output directories based on whether AI analysis is used:
+
+- **Standard Mirroring**: `./domain-standard` (e.g., `./example.com-standard`)
+- **AI-Enhanced Mirroring**: `./domain-ai-enhanced` (e.g., `./example.com-ai-enhanced`)
+- **Custom Output**: Uses your specified directory path (overrides automatic naming)
+
+This allows you to easily compare standard vs AI-enhanced outputs and organize your projects.
+
+### Usage Examples by Category
+
+#### **Basic Mirroring**
+
+```bash
+# Simple website mirror (outputs to example.com-standard)
 node src/cli.js https://example.com
 
-# Clean mirror without tracking scripts
+# Mirror to specific directory
+node src/cli.js https://company-site.com -o ./company-mirror
+
+# Mirror with debug logging (outputs to portfolio.dev-standard)
+node src/cli.js https://portfolio.dev --debug
+```
+
+#### **Clean Mirroring (Recommended)**
+
+```bash
+# Remove tracking scripts and analytics (outputs to blog-site.com-standard)
+node src/cli.js https://blog-site.com --clean
+
+# Clean mirror with custom output
+node src/cli.js https://news-site.com --clean -o ./news-clean
+
+# Clean mirror with debug info (outputs to e-commerce.com-standard)
+node src/cli.js https://e-commerce.com --clean --debug
+```
+
+#### **AI-Enhanced Mirroring**
+
+**Windows PowerShell:**
+
+```powershell
+# Set OpenAI API key first
+$env:OPENAI_API_KEY="sk-your-api-key-here"
+
+# AI analysis for optimal conversion (outputs to react-app.com-ai-enhanced)
+node src/cli.js https://react-app.com --ai
+```
+
+**macOS/Linux (Bash/Zsh):**
+
+```bash
+# Set OpenAI API key first
+export OPENAI_API_KEY="sk-your-api-key-here"
+
+# AI analysis for optimal conversion (outputs to react-app.com-ai-enhanced)
+node src/cli.js https://react-app.com --ai
+```
+
+**Cross-platform examples:**
+
+```bash
+# AI + clean + custom output
+node src/cli.js https://vue-app.dev --ai --clean -o ./ai-optimized
+
+# AI with debugging (outputs to complex-spa.com-ai-enhanced)
+node src/cli.js https://complex-spa.com --ai --debug
+```
+
+#### **Framework-Specific Examples**
+
+```bash
+# React applications
 node src/cli.js https://react-site.com --clean
 
-# Custom output directory with debug logging
-node src/cli.js https://nextjs-app.com -o ./my-project --debug
+# Next.js applications (JavaScript disabled for compatibility)
+node src/cli.js https://nextjs-app.com --clean --debug
 
-# AI-powered analysis (requires OPENAI_API_KEY)
-node src/cli.js https://vue-app.com --ai --clean
+# Vue.js applications
+node src/cli.js https://vue-app.dev --clean
 
-# Complex site with extended timeout
-node src/cli.js https://complex-site.com --timeout 180000 --debug
+# Angular applications
+node src/cli.js https://angular-site.io --clean
 
-# Video-rich websites (VS Code, Apple, etc.)
-node src/cli.js https://code.visualstudio.com --clean
+# Static sites with interactive elements
+node src/cli.js https://jquery-site.com --clean
+```
+
+#### **Complex Sites & Media**
+
+```bash
+# Video-rich websites (extended timeout)
+node src/cli.js https://code.visualstudio.com --clean --timeout 300000
+
+# Large e-commerce sites
+node src/cli.js https://shop-site.com --clean --timeout 180000 --debug
+
+# Media-heavy portfolios
+node src/cli.js https://photographer.com --clean -o ./portfolio
+```
+
+#### **Production & Development**
+
+```bash
+# Production mirroring
+npm start https://production-site.com --clean
+
+# Development testing
+npm run dev -- https://test-site.dev --debug
+
+# Quick validation
+npm test
+
+# Lint checking
+npm run lint
 ```
 
 ## Core Architecture
@@ -123,28 +240,207 @@ output-dir/
 - ✅ **Easy Maintenance**: Standard web technologies that any developer can modify
 - ✅ **Universal Deployment**: Deploy anywhere without build processes
 
-## AI Integration
+## AI Integration & Features
+
+### AI Usage Overview
+
+The Mirror Web CLI includes **optional AI-powered analysis** using OpenAI's GPT-4o model. **AI features are completely optional** and the tool works fully without them.
+
+#### **Core vs AI Functionality**
+
+| Feature | Core (No AI) | AI-Enhanced |
+|---------|-------------|-------------|
+| Website Mirroring | ✅ Full functionality | ✅ Enhanced optimization |
+| Framework Detection | ✅ 14+ frameworks | ✅ + AI validation |
+| Asset Processing | ✅ Complete | ✅ + Smart optimization |
+| Offline Compatibility | ✅ Yes | ✅ Yes |
+| API Key Required | ❌ No | ✅ OpenAI API key |
+| Cost | 🆓 Free | 💰 OpenAI API usage |
+
+### When to Use AI Features
+
+#### **Use AI When:**
+
+- Complex SPA applications with intricate state management
+- Unusual or custom framework implementations
+- Sites with complex asset dependencies
+- Need optimization recommendations
+- Working with experimental frameworks
+
+#### **Skip AI For:**
+
+- Simple static websites
+- Standard React/Vue/Angular applications
+- Quick testing and prototyping
+- Bandwidth-limited environments
+- Cost-sensitive projects
 
 ### Environment Setup
 
-The AI features require an OpenAI API key:
+**Step 1: Get OpenAI API Key**
+
+1. Visit [OpenAI API](https://platform.openai.com/api-keys)
+2. Create an account and generate an API key
+3. Add billing information (usage-based pricing)
+
+**Step 2: Set Environment Variable**
 
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+# Linux/macOS
+export OPENAI_API_KEY="sk-your-api-key-here"
+
+# Windows CMD
+set OPENAI_API_KEY=sk-your-api-key-here
+
+# Windows PowerShell
+$env:OPENAI_API_KEY="sk-your-api-key-here"
+
+# .env file (create in project root)
+OPENAI_API_KEY=sk-your-api-key-here
 ```
 
-### AI Analysis Flow
+**Step 3: Verify Setup**
+```bash
+# Test with AI analysis
+node src/cli.js https://example.com --ai --debug
+```
+
+### AI Analysis Process
+
+When `--ai` flag is used, the tool follows this enhanced workflow:
+
+```
+1. Standard Mirroring → 2. AI Analysis → 3. Optimization → 4. Enhanced Output
+```
+
+#### **Detailed AI Flow:**
 
 1. **Website Content Extraction**: Puppeteer captures full page content from any framework
-2. **Framework Detection**: Analyzes for React/Vue/Angular/Next.js/Nuxt patterns
+2. **Framework Detection**: Standard detection + AI validation and confidence scoring
 3. **Chain-of-Thought Analysis**: AI reasoning process for optimal conversion strategy
-4. **Framework Conversion**: Intelligent conversion of framework-specific code to vanilla HTML/CSS/JS
-5. **Asset Optimization**: Smart asset bundling and optimization for universal output
+4. **Asset Dependencies**: AI identifies complex asset relationships and dependencies
+5. **Framework Conversion**: Intelligent conversion strategies for framework-specific code
+6. **Performance Optimization**: AI suggests and applies performance improvements
+7. **Compatibility Enhancement**: AI ensures cross-browser and offline compatibility
 
-### AI Models Used
+### AI Models & Configuration
 
-- **gpt-4o**: For website analysis and asset optimization
-- Temperature: 0.1 for consistent, logical reasoning
+- **Model**: OpenAI GPT-4o
+- **Temperature**: 0.1 (consistent, logical reasoning)
+- **Max Tokens**: Dynamically adjusted based on content complexity
+- **Timeout**: 30 seconds per analysis request
+- **Fallback**: Automatic fallback to core functionality if AI fails
+
+### AI Cost Estimation
+
+Typical costs for different website types:
+
+| Website Type | Avg Tokens | Est Cost |
+|-------------|------------|----------|
+| Simple Static | 1,000-2,000 | ~$0.01-0.02 |
+| SPA (React/Vue) | 3,000-5,000 | ~$0.03-0.05 |
+| Complex App | 5,000-10,000 | ~$0.05-0.10 |
+| E-commerce | 8,000-15,000 | ~$0.08-0.15 |
+
+*Costs based on GPT-4o pricing as of 2024. Check OpenAI pricing for current rates.*
+
+### AI Error Handling
+
+The system gracefully handles AI failures:
+
+```bash
+# AI request fails → Automatic fallback to core functionality
+⚠️ AI analysis failed, continuing with standard mirroring...
+✅ Website mirroring completed successfully (without AI optimization)
+```
+
+**Common AI Issues:**
+- **Network connectivity**: Auto-retry with exponential backoff
+- **API key invalid**: Clear error message with setup instructions
+- **Rate limits**: Automatic retry with appropriate delays
+- **Token limits**: Content chunking for large websites
+
+## React/Next.js Compatibility System
+
+### Problem Solved
+
+**Issue**: React/Next.js applications were showing "Application error: a client-side exception has occurred" due to hydration mismatches between server-rendered content and client-side expectations.
+
+**Solution**: Intelligent framework detection with automatic JavaScript handling strategies.
+
+### Framework Detection & Handling
+
+The system automatically detects React/Next.js applications and applies appropriate strategies:
+
+#### **Detection Methods:**
+1. **Framework Analysis**: Checks for Next.js-specific patterns
+2. **DOM Inspection**: Looks for `#__next`, `[data-reactroot]` elements
+3. **Script Analysis**: Identifies React/Next.js runtime scripts
+
+#### **Handling Strategies:**
+
+| Framework Type | Strategy | JavaScript | Enhancements |
+|---------------|----------|------------|-------------|
+| **React/Next.js** | JavaScript Disabled | ❌ Removed | ❌ Minimal |
+| **Vue/Nuxt** | JavaScript Disabled | ❌ Removed | ❌ Minimal |
+| **Angular** | JavaScript Disabled | ❌ Removed | ❌ Minimal |
+| **Static/jQuery** | Full Enhancement | ✅ Preserved | ✅ Full Suite |
+| **WordPress** | Full Enhancement | ✅ Preserved | ✅ Full Suite |
+
+### React/Next.js Processing Details
+
+#### **What Gets Removed:**
+- All `<script>` tags with React/Next.js runtime
+- Script preload links (`<link rel="preload" as="script">`)
+- Hydration data and state management scripts
+- Dynamic import statements and code splitting
+
+#### **What Gets Preserved:**
+- All CSS styling and layout
+- HTML structure and content
+- Images, videos, and media assets
+- Static functionality (forms, links)
+- Essential meta tags and SEO data
+
+#### **Indicators Added:**
+```html
+<!-- Added to <head> for identification -->
+<meta name="js-disabled" content="true">
+<script>
+// JavaScript disabled for offline compatibility with Next.js
+console.log('[Mirror Web CLI] JavaScript disabled to ensure offline compatibility');
+</script>
+```
+
+### Benefits of JavaScript Disabling
+
+#### **For React/Next.js Sites:**
+- ✅ **Zero Client-Side Exceptions**: No hydration mismatches possible
+- ✅ **Faster Loading**: No large JavaScript bundles to download
+- ✅ **Better SEO**: Pure HTML content is more crawlable
+- ✅ **Universal Compatibility**: Works in any browser without JavaScript
+- ✅ **Offline First**: No dependency on JavaScript runtime
+
+#### **Trade-offs:**
+- ❌ **No Interactivity**: Buttons, forms, and dynamic features won't work
+- ❌ **No Client-Side Routing**: Single page only (no navigation)
+- ❌ **No State Management**: Redux, Context, etc. won't function
+- ❌ **No Real-time Features**: WebSockets, live updates disabled
+
+### When This Strategy Works Best
+
+#### **Ideal Use Cases:**
+- **Documentation Sites**: Static content with great styling
+- **Portfolios**: Visual presentation without complex interactions
+- **Marketing Pages**: Landing pages and promotional content
+- **Archive/Backup**: Preserving visual design and content
+- **Offline Reference**: Company information, product catalogs
+
+#### **Not Recommended For:**
+- **Web Applications**: Complex user interactions required
+- **E-commerce**: Shopping carts, checkout processes
+- **Dashboards**: Real-time data and interactive charts
+- **Social Platforms**: User-generated content and interactions
 
 ## Video & Media Handling Implementation
 
@@ -371,34 +667,185 @@ This showcases all available animations with exact Claude Code styling and timin
 
 ### Common Issues
 
-1. **"Cannot read properties of undefined (reading 'replace')" Error**
-   - **Fixed in v2.2**: This error has been resolved through comprehensive constructor fixes
-   - **Root Cause**: Was caused by undefined outputDir in filesystem operations
-   - **Solution**: Enhanced parameter handling in `TechStackCloner` constructor
+#### **1. React/Next.js Client-Side Exceptions**
+- **Error**: "Application error: a client-side exception has occurred (see the browser console for more information)"
+- **Cause**: Hydration mismatches between server-rendered content and client-side expectations
+- **Solution**: ✅ **FIXED** - Automatic JavaScript disabling for React/Next.js applications
+- **How it works**: System detects React/Next.js and removes all JavaScript to prevent hydration conflicts
+- **Verification**: Look for `<meta name="js-disabled" content="true">` in output HTML
 
-2. **API Connection Errors**
-   - **Description**: "API Error (Connection error.) · Retrying in 1 seconds…"
-   - **Cause**: Network connectivity issues or OpenAI API rate limits
-   - **Solution**: These are temporary and will auto-retry; ensure stable internet connection
+#### **2. OpenAI API Issues**
+- **Error**: "API Error (Connection error.) · Retrying in 1 seconds…"
+- **Causes**:
+  - Invalid API key: `Error: Invalid API key provided`
+  - Rate limits: `Error: Rate limit exceeded`
+  - Network issues: `Error: Failed to fetch`
+- **Solutions**:
+  ```bash
+  # Check API key setup
+  echo $OPENAI_API_KEY
+  
+  # Test without AI first
+  node src/cli.js <url> --clean --debug
+  
+  # Then try with AI
+  node src/cli.js <url> --ai --clean --debug
+  ```
 
-3. **Framework Detection Issues**
-   - **Solution**: Use `--debug` flag to see detailed detection process
-   - **Alternative**: Disable detection with `--no-detect` flag
+#### **3. Framework Detection Issues**
+- **Problem**: Incorrect framework detection or confidence scores
+- **Debug**: Use `--debug` flag to see detailed detection process
+- **Example output**:
+  ```bash
+  ✓ Detected: Next.js (Confidence: 85%)
+  ✓ Strategy: JavaScript disabled for React compatibility
+  ```
 
-4. **Memory Issues with Large Sites**
-   - **Solution**: Use `--clean` flag to reduce memory usage
-   - **Alternative**: Process specific sections rather than entire sites
+#### **4. Memory Issues with Large Sites**
+- **Symptoms**: Process crashes or extremely slow performance
+- **Solutions**:
+  ```bash
+  # Use clean flag to reduce memory usage
+  node src/cli.js <url> --clean
+  
+  # Increase timeout for large sites
+  node src/cli.js <url> --timeout 300000 --clean
+  
+  # Enable debug to monitor progress
+  node src/cli.js <url> --debug --clean
+  ```
 
-### Debug Mode
+#### **5. Asset Download Failures**
+- **Warning**: "Non-critical asset skipped: Request failed with status code 404"
+- **Cause**: Missing assets (404), CORS issues, or network problems
+- **Impact**: Usually non-critical; site functionality preserved
+- **Debug**: Check `--debug` output for specific asset URLs
 
-Enable comprehensive logging:
+#### **6. Video/Media Processing Issues**
+- **Symptoms**: Missing videos or audio files in output
+- **Solutions**:
+  ```bash
+  # Increase timeout for media-heavy sites
+  node src/cli.js <url> --timeout 300000 --clean
+  
+  # Check debug output for media processing
+  node src/cli.js <url> --debug --clean
+  ```
 
+### Framework-Specific Troubleshooting
+
+#### **React/Next.js Applications**
+```bash
+# If you see client-side exceptions:
+✅ Solution: Automatic (JavaScript disabled)
+✅ Verification: Check for js-disabled meta tag
+✅ Result: Static HTML with full styling preserved
+
+# Manual verification:
+grep "js-disabled" output-directory/index.html
+```
+
+#### **Vue/Nuxt Applications**
+```bash
+# Similar to React handling
+✅ Automatic JavaScript disabling
+✅ CSS and layout preserved
+✅ No client-side exceptions
+```
+
+#### **WordPress Sites**
+```bash
+# Full enhancement with JavaScript preserved
+✅ Interactive elements work
+✅ Animations and effects preserved
+✅ jQuery functionality maintained
+```
+
+#### **Static/Traditional Sites**
+```bash
+# Full enhancement suite applied
+✅ Hover animations work (Google AI button, etc.)
+✅ All interactive elements preserved
+✅ Enhanced offline compatibility
+```
+
+### Debug Mode & Diagnostics
+
+#### **Basic Debug Mode**
 ```bash
 node src/cli.js <url> --debug
 ```
 
-This provides detailed information about:
-- Framework detection results
-- Asset extraction process
-- File system operations
-- Error stack traces
+**Provides detailed information about:**
+- Framework detection results and confidence scores
+- Asset extraction process and download status
+- JavaScript handling strategy applied
+- File system operations and output generation
+- Error stack traces and warning details
+
+#### **Advanced Debugging**
+```bash
+# Test framework detection only
+node src/cli.js <url> --debug | grep "Framework Analysis"
+
+# Monitor asset processing
+node src/cli.js <url> --debug | grep "Downloading"
+
+# Check JavaScript handling
+node src/cli.js <url> --debug | grep "JavaScript\|React\|Next.js"
+```
+
+#### **Verification Commands**
+```bash
+# Check if JavaScript was disabled (React/Next.js sites)
+grep -q "js-disabled" output/index.html && echo "✅ JS Disabled" || echo "❌ JS Enabled"
+
+# Count total assets processed
+ls output/assets/*/* | wc -l
+
+# Check for specific file types
+find output -name "*.mp4" -o -name "*.webm" # Videos
+find output -name "*.css" # Stylesheets
+find output -name "*.js" # JavaScript files
+```
+
+### Performance Optimization
+
+#### **For Large Websites**
+```bash
+# Recommended flags for large sites
+node src/cli.js <url> --clean --timeout 300000 --debug
+
+# Monitor memory usage (Linux/macOS)
+top -p $(pgrep node)
+
+# Windows Task Manager: Look for Node.js process
+```
+
+#### **For Media-Heavy Sites**
+```bash
+# Extended timeout for video processing
+node src/cli.js <url> --clean --timeout 600000
+
+# Check media processing in debug output
+node src/cli.js <url> --debug | grep -E "(video|audio|media)"
+```
+
+### When to Contact Support
+
+Create an issue with the following information:
+
+1. **Command used**: Full command line with flags
+2. **Website URL**: Target website (if publicly accessible)
+3. **Error output**: Complete error message and stack trace
+4. **Debug output**: Run with `--debug` flag and include relevant portions
+5. **Environment**: OS, Node.js version, npm version
+6. **Expected vs Actual**: What you expected vs what happened
+
+```bash
+# Gather environment info
+node --version
+npm --version
+uname -a  # Linux/macOS
+ver       # Windows
+```

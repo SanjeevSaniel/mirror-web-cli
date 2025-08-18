@@ -9,7 +9,9 @@
       "Bash(npm install:*)",
       "Bash(grep:*)",
       "Bash(npm pack:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(pkill:*)",
+      "Bash(true)"
     ],
     "additionalDirectories": [
       "D:\\d\\1A-Personal\\D-Learnings\\1-Projects"

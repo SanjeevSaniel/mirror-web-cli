@@ -8,6 +8,16 @@ export class FrameworkWriter {
     this.assetMappings = new Map(); // absolute URL (and alternates) -> local ./assets/... path
   }
 
+  // PUBLIC: write HTML only (used by auto-fallback), reusing existing mappings and the current disableJs flag
+  async writeIndexHtmlOnly() {
+    const html = await this.generateExactHTMLAndReturn();
+    await fs.writeFile(
+      path.join(this.cloner.options.outputDir, 'index.html'),
+      html,
+      'utf8',
+    );
+  }
+
   addOfflineErrorHandling($) {
     const isNextJs =
       this.cloner.analysis?.primaryFramework?.key === 'nextjs' ||
@@ -22,7 +32,7 @@ export class FrameworkWriter {
       const errorBoundaryScript = `
 <script>
 (function() {
-  window.addEventListener('error', function(event) {
+  window.addEventListener('error', function() {
     try {
       const overlay = document.querySelector('[data-nextjs-dialog-overlay]');
       if (overlay) overlay.style.display = 'none';
@@ -32,7 +42,7 @@ export class FrameworkWriter {
       }
     } catch(e){}
     return true;
-  });
+  }, true);
   window.addEventListener('unhandledrejection', function(event) {
     event.preventDefault();
   });
@@ -40,6 +50,86 @@ export class FrameworkWriter {
 </script>`;
       $('head').append(errorBoundaryScript);
     }
+  }
+
+  // Guard that preserves SSR DOM; also handles file:// case by disabling Next/React scripts immediately
+  injectHydrationGuard($) {
+    const isReactOrNext =
+      this.cloner.analysis?.primaryFramework?.key === 'nextjs' ||
+      this.cloner.analysis?.primaryFramework?.key === 'react' ||
+      $('#__next, #root, [data-reactroot]').length > 0;
+
+    if (!isReactOrNext) return;
+
+    const guard = `
+<script>
+(function(){
+  try {
+    var ROOT_SEL = '#__next, #root, [data-reactroot]';
+    var root = document.querySelector(ROOT_SEL);
+    if (!root) return;
+    var ssrSnapshot = root.innerHTML;
+    var restored = false;
+
+    function stripNextScripts() {
+      try {
+        document.querySelectorAll('script[src*="/_next/"],link[rel="preload"][as="script"]').forEach(function(n){ n.parentNode && n.parentNode.removeChild(n); });
+        // Try to disable inline bootstrap by toggling a flag that guards common Next/React bootstraps
+        window.__MW_DISABLE_NEXT = true;
+      } catch(e){}
+    }
+
+    function restoreIfBlank(reason) {
+      if (restored) return;
+      var r = document.querySelector(ROOT_SEL);
+      if (!r) return;
+      var empty = !r.innerHTML || r.innerHTML.trim().length < 20;
+      if (!empty) return;
+      restored = true;
+      stripNextScripts();
+      try { r.innerHTML = ssrSnapshot; } catch(e){}
+      if (console && console.warn) console.warn('[MirrorWeb] Hydration guard restored SSR due to:', reason||'unknown');
+    }
+
+    // If opened directly from disk, disable framework hydration preemptively
+    if (location.protocol === 'file:') {
+      stripNextScripts();
+      // Ensure SSR snapshot remains visible
+      try { root.innerHTML = ssrSnapshot; } catch(e){}
+    }
+
+    // Timed checks post-DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', function(){
+      setTimeout(function(){ restoreIfBlank('post-DCL 50ms'); }, 50);
+      setTimeout(function(){ restoreIfBlank('post-DCL 500ms'); }, 500);
+      setTimeout(function(){ restoreIfBlank('post-DCL 2000ms'); }, 2000);
+    });
+
+    // Global error hooks -> try restore
+    window.addEventListener('error', function(){ restoreIfBlank('window error'); }, true);
+    window.addEventListener('unhandledrejection', function(){ restoreIfBlank('unhandledrejection'); }, true);
+
+    // If mutations clear root, restore
+    var mo = new MutationObserver(function(){
+      var r = document.querySelector(ROOT_SEL);
+      if (!r) return;
+      if (!r.innerHTML || r.innerHTML.trim().length < 5) {
+        restoreIfBlank('mutation empty');
+      }
+    });
+    mo.observe(document.documentElement, { subtree: true, childList: true });
+  } catch(e){}
+})();
+</script>`;
+    // Prepend so it runs before other scripts
+    $('head').prepend(guard);
+  }
+
+  // Remove all scripts for a static snapshot (prevents Next/React from wiping SSR HTML)
+  stripAllScriptsForStaticSnapshot($) {
+    $('script').remove();
+    $('link[rel="preload"][as="script"]').remove();
+    $('head').append('<meta name="js-disabled" content="true">');
   }
 
   async generateOfflineProject() {
@@ -73,15 +163,12 @@ export class FrameworkWriter {
   }
 
   buildAssetMappings() {
-    // CSS
     for (const s of this.cloner.assets.styles) {
       if (s.url) this.assetMappings.set(s.url, `./assets/css/${s.filename}`);
     }
-    // JS
     for (const s of this.cloner.assets.scripts) {
       if (s.url) this.assetMappings.set(s.url, `./assets/js/${s.filename}`);
     }
-    // Images
     for (const img of this.cloner.assets.images) {
       if (img.url)
         this.assetMappings.set(img.url, `./assets/images/${img.filename}`);
@@ -100,15 +187,12 @@ export class FrameworkWriter {
         this.assetMappings.set(img.url, `./assets/images/${img.filename}`);
       }
     }
-    // Fonts
     for (const f of this.cloner.assets.fonts) {
       if (f.url) this.assetMappings.set(f.url, `./assets/fonts/${f.filename}`);
     }
-    // Icons
     for (const i of this.cloner.assets.icons) {
       if (i.url) this.assetMappings.set(i.url, `./assets/icons/${i.filename}`);
     }
-    // Media
     for (const m of this.cloner.assets.media) {
       if (m.url) this.assetMappings.set(m.url, `./assets/media/${m.filename}`);
     }
@@ -124,6 +208,7 @@ export class FrameworkWriter {
       this.assetMappings.set(absUrl, local);
       return local;
     }
+
     const filename = this.cloner.generateFilename(absUrl, 'images');
     this.cloner.assets.images.push({
       url: absUrl,
@@ -150,6 +235,7 @@ export class FrameworkWriter {
   getLocalForNextImage(nextUrl) {
     const absNext = this.cloner.resolveUrl(nextUrl);
     if (this.assetMappings.has(absNext)) return this.assetMappings.get(absNext);
+
     const original = this.extractNextImageUrl(nextUrl);
     if (original) {
       const absOriginal = this.cloner.resolveUrl(original);
@@ -160,8 +246,10 @@ export class FrameworkWriter {
     return null;
   }
 
-  // Runtime rewriter: now also rewrites srcset and imagesrcset
+  // Keep JS by default; only skip runtime injection if JS is explicitly disabled
   injectRuntimeRewriter($) {
+    if (this.cloner.options.disableJs) return;
+
     const map = Object.fromEntries(this.assetMappings.entries());
     const debug = !!this.cloner.options.debug;
 
@@ -171,15 +259,14 @@ export class FrameworkWriter {
   try{
     const MAP = ${JSON.stringify(map)};
     const DEBUG = ${JSON.stringify(debug)};
-    function log(...args){ if (DEBUG) console.log('[MW rewrite]', ...args); }
-
+    function log(){ if (DEBUG) console.log.apply(console, ['[MW rewrite]'].concat([].slice.call(arguments))); }
     function resolve(u){
       if (!u) return null;
       if (MAP[u]) return MAP[u];
       if (u.includes('/_next/image') && u.includes('url=')) {
         try{
           const p = new URL(u, location.href);
-          const t = decodeURIComponent(p.searchParams.get('url') || '');
+          const t = decodeURIComponent(p.searchParams.get('url')||'');
           if (t) {
             const abs = new URL(t, location.href).href;
             if (MAP[abs]) return MAP[abs];
@@ -188,12 +275,10 @@ export class FrameworkWriter {
       }
       return null;
     }
-
     function extractCssUrl(val){
       const m = /url\\(\\s*['"]?([^'")]+)['"]?\\s*\\)/i.exec(val||'');
       return m ? m[1] : null;
     }
-
     function rewriteSrcsetString(srcsetStr){
       if (!srcsetStr) return srcsetStr;
       const parts = srcsetStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -209,57 +294,30 @@ export class FrameworkWriter {
       }).join(', ');
       return changed ? rewritten : srcsetStr;
     }
-
     function rewriteNode(el){
       if (!el || el.nodeType !== 1) return;
-
-      // src/href/poster
       ['src','href','poster'].forEach(attr=>{
         const v = el.getAttribute && el.getAttribute(attr);
         const r = resolve(v);
-        if (r && v !== r) {
-          log(attr+':', v, '->', r);
-          el.setAttribute(attr, r);
-        }
+        if (r && v !== r) { log(attr+':', v, '->', r); el.setAttribute(attr, r); }
       });
-
-      // srcset/imagesrcset
       ['srcset','imagesrcset'].forEach(attr=>{
         const v = el.getAttribute && el.getAttribute(attr);
         if (!v) return;
-        const newVal = rewriteSrcsetString(v);
-        if (newVal && newVal !== v) {
-          log(attr+':', v, '->', newVal);
-          el.setAttribute(attr, newVal);
-        }
+        const nv = rewriteSrcsetString(v);
+        if (nv && nv !== v) { log(attr+':', v, '->', nv); el.setAttribute(attr, nv); }
       });
-
-      // Inline style background-image
       if (el.hasAttribute && el.hasAttribute('style')) {
         const s = el.getAttribute('style') || '';
         const url = extractCssUrl(s);
         const r = resolve(url);
-        if (r && url && url !== r) {
-          log('style background-image:', url, '->', r);
-          el.style.backgroundImage = "url('"+r+"')";
-        }
+        if (r && url && url !== r) { log('style background-image:', url, '->', r); el.style.backgroundImage = "url('"+r+"')"; }
       }
     }
-
-    // Initial pass
     document.querySelectorAll('[src],[href],[poster],[srcset],[imagesrcset],[style]').forEach(rewriteNode);
-
-    // Observe dynamic changes (hover cards)
     const obs = new MutationObserver(muts=>{
       muts.forEach(m=>{
-        if (m.type === 'attributes' && (
-            m.attributeName==='src' ||
-            m.attributeName==='href' ||
-            m.attributeName==='poster' ||
-            m.attributeName==='style' ||
-            m.attributeName==='srcset' ||
-            m.attributeName==='imagesrcset'
-        )) {
+        if (m.type === 'attributes' && (m.attributeName==='src'||m.attributeName==='href'||m.attributeName==='poster'||m.attributeName==='style'||m.attributeName==='srcset'||m.attributeName==='imagesrcset')) {
           rewriteNode(m.target);
         } else if (m.type === 'childList') {
           m.addedNodes.forEach(n=>{
@@ -280,7 +338,70 @@ export class FrameworkWriter {
     $('head').append(runtimeScript);
   }
 
-  // Creates the HTML with all asset rewrites and returns it (JS is preserved)
+  // Patch inline Next.js asset URLs inside inline scripts (when JS is enabled)
+  enhanceJavaScriptContentRewriting($) {
+    if (this.cloner.options.disableJs) return;
+
+    const isNextJs =
+      this.cloner.analysis?.primaryFramework?.key === 'nextjs' ||
+      $('#__next').length > 0 ||
+      $('script[src*="_next"]').length > 0;
+    if (!isNextJs) return;
+
+    const extendedMap = new Map(this.assetMappings);
+    for (const [fullUrl, localPath] of this.assetMappings.entries()) {
+      try {
+        const u = new URL(fullUrl);
+        const filename = path.basename(u.pathname);
+        if (filename) extendedMap.set(filename, localPath);
+      } catch {}
+    }
+
+    $('script:not([src])').each((_, el) => {
+      let content = $(el).html();
+      if (
+        !content ||
+        (!content.includes('/_next/') && !content.includes('static/'))
+      )
+        return;
+
+      content = content.replace(
+        /"\/_next\/static\/css\/([^"]+\.css[^"]*?)"/g,
+        (m, fname) => {
+          for (const [full, local] of extendedMap.entries())
+            if (full.includes(fname.split('?')[0])) return `"${local}"`;
+          return m;
+        },
+      );
+      content = content.replace(
+        /"\/_next\/static\/chunks\/([^"]+\.js[^"]*?)"/g,
+        (m, fname) => {
+          for (const [full, local] of extendedMap.entries())
+            if (full.includes(fname.split('?')[0])) return `"${local}"`;
+          return m;
+        },
+      );
+      content = content.replace(
+        /"static\/chunks\/([^"]+\.js[^"]*?)"/g,
+        (m, fname) => {
+          for (const [full, local] of extendedMap.entries())
+            if (full.includes(fname.split('?')[0])) return `"${local}"`;
+          return m;
+        },
+      );
+      content = content.replace(
+        /"\/_next\/static\/media\/([^"]+\.(woff2?|ttf|otf)[^"]*?)"/g,
+        (m, fname) => {
+          for (const [full, local] of extendedMap.entries())
+            if (full.includes(fname.split('?')[0])) return `"${local}"`;
+          return m;
+        },
+      );
+
+      $(el).html(content);
+    });
+  }
+
   async generateExactHTMLAndReturn() {
     const $ = this.cloner.$;
 
@@ -292,13 +413,21 @@ export class FrameworkWriter {
       `<meta name="mirrored-date" content="${new Date().toISOString()}">`,
     );
 
-    this.addOfflineErrorHandling($);
-    this.injectRuntimeRewriter($);
+    // JS kept or removed based on auto decision
+    const shouldStrip = this.cloner.options.disableJs;
 
-    // Remove helper images (from computed asset collection)
+    if (shouldStrip) {
+      this.stripAllScriptsForStaticSnapshot($);
+    } else {
+      // Guard before other scripts to prevent blank pages on hydration errors
+      this.injectHydrationGuard($);
+      this.addOfflineErrorHandling($);
+      this.injectRuntimeRewriter($);
+      this.enhanceJavaScriptContentRewriting($);
+    }
+
     $('img[data-mw-computed]').remove();
 
-    // Stylesheets
     $('link[rel="stylesheet"], link[rel="preload"][as="style"]').each(
       (_, el) => {
         const $el = $(el);
@@ -311,28 +440,43 @@ export class FrameworkWriter {
       },
     );
 
-    // Scripts (keep, rewrite if mapped)
-    $('script[src]').each((_, el) => {
-      const $el = $(el);
-      const src = $el.attr('src');
-      if (!src) return;
-      if (
-        this.cloner.options.clean &&
-        this.cloner.assetManager.isTrackingScript(src)
-      ) {
-        $el.remove();
-        return;
-      }
-      const abs = this.cloner.resolveUrl(src);
-      if (this.assetMappings.has(abs)) {
-        $el.attr('src', this.assetMappings.get(abs));
-      }
-    });
+    if (!shouldStrip) {
+      $('script[src]').each((_, el) => {
+        const $el = $(el);
+        const src = $el.attr('src');
+        if (!src) return;
+
+        if (
+          this.cloner.options.clean &&
+          this.cloner.assetManager.isTrackingScript(src)
+        ) {
+          $el.remove();
+          return;
+        }
+
+        const abs = this.cloner.resolveUrl(src);
+        if (this.assetMappings.has(abs)) {
+          $el.attr('src', this.assetMappings.get(abs));
+        }
+      });
+
+      $('link[rel="preload"][as="script"]').each((_, el) => {
+        const $el = $(el);
+        const href = $el.attr('href');
+        if (!href) return;
+        const abs = this.cloner.resolveUrl(href);
+        if (this.assetMappings.has(abs)) {
+          $el.attr('href', this.assetMappings.get(abs));
+        } else {
+          $el.remove();
+        }
+      });
+    }
 
     const firstTruthy = (...vals) =>
       vals.find((v) => v && String(v).trim().length > 0) || null;
 
-    // Images (static pass)
+    // Images
     $('img').each((_, el) => {
       const $el = $(el);
       const src = $el.attr('src') || '';
@@ -360,7 +504,7 @@ export class FrameworkWriter {
       }
     });
 
-    // srcset handling (static pass)
+    // srcset
     $('[srcset]').each((_, el) => {
       const $el = $(el);
       const srcset = $el.attr('srcset');
@@ -389,7 +533,7 @@ export class FrameworkWriter {
       $el.attr('srcset', updated);
     });
 
-    // imagesrcset handling (static pass)
+    // imagesrcset
     $('[imagesrcset]').each((_, el) => {
       const $el = $(el);
       const imagesrcset = $el.attr('imagesrcset');
@@ -428,7 +572,7 @@ export class FrameworkWriter {
       if (local) $el.attr('poster', local);
     });
 
-    // Video/Audio <source>
+    // Video/Audio
     $('video[src], audio[src], source[src]').each((_, el) => {
       const $el = $(el);
       const src = $el.attr('src');
@@ -460,18 +604,18 @@ export class FrameworkWriter {
       const style = $el.attr('style');
       if (!style) return;
       const updated = style.replace(
-        /url\\(\\s*(['"]?)([^'")]+)\\1\\s*\\)/gi,
+        /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
         (m, _q, raw) => {
           if (!raw || raw.startsWith('data:')) return m;
           const abs = this.cloner.resolveUrl(raw);
           const local = this.ensureMappedImage(abs);
-          return local ? "url('" + local + "')" : m;
+          return local ? `url('${local}')` : m;
         },
       );
       if (updated !== style) $el.attr('style', updated);
     });
 
-    // Inline <style> blocks
+    // Inline <style> blocks: rewrite CSS url(...) and download assets
     const axios = (await import('axios')).default;
     await Promise.all(
       $('style')
@@ -501,7 +645,7 @@ export class FrameworkWriter {
       }
     });
 
-    // Final safety net
+    // Safety net: finalize Next.js image replacements
     let html = $.html();
     html = this.finalizeNextImageReplacements(html);
     return html;
@@ -549,8 +693,7 @@ export class FrameworkWriter {
         );
       }
       for (const img of this.cloner.assets.images) {
-        // Skip _next/image (we alias to original)
-        if (img.url && img.url.includes('/_next/image')) continue;
+        if (img.url && img.url.includes('/_next/image')) continue; // skip optimizer endpoints
 
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -588,7 +731,7 @@ export class FrameworkWriter {
               res.headers?.['content-type'] || '',
             ).toLowerCase();
 
-            // Follow Microlink JSON to real image
+            // Follow Microlink JSON if necessary
             if (
               /microlink\.io/i.test(u) &&
               ctype.includes('application/json')
@@ -652,10 +795,11 @@ export class FrameworkWriter {
       (s) => s.url && s.type === 'external',
     );
     if (cssExternals.length) {
-      if (!this.cloner.options.quiet)
+      if (!this.cloner.options.quiet) {
         console.log(
           chalk.gray(`    Downloading ${cssExternals.length} CSS files...`),
         );
+      }
       for (const css of cssExternals) {
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -681,13 +825,17 @@ export class FrameworkWriter {
       }
     }
 
-    // JS externals
-    const jsExternals = this.cloner.assets.scripts.filter((s) => s.url);
+    // JS externals: download when JS is enabled (based on decision)
+    const jsExternals = this.cloner.options.disableJs
+      ? []
+      : this.cloner.assets.scripts.filter((s) => s.url);
+
     if (jsExternals.length) {
-      if (!this.cloner.options.quiet)
+      if (!this.cloner.options.quiet) {
         console.log(
           chalk.gray(`    Downloading ${jsExternals.length} JS files...`),
         );
+      }
       for (const s of jsExternals) {
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -711,12 +859,13 @@ export class FrameworkWriter {
 
     // Fonts
     if (this.cloner.assets.fonts.length) {
-      if (!this.cloner.options.quiet)
+      if (!this.cloner.options.quiet) {
         console.log(
           chalk.gray(
             `    Downloading ${this.cloner.assets.fonts.length} fonts...`,
           ),
         );
+      }
       for (const f of this.cloner.assets.fonts) {
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -741,12 +890,13 @@ export class FrameworkWriter {
 
     // Icons
     if (this.cloner.assets.icons.length) {
-      if (!this.cloner.options.quiet)
+      if (!this.cloner.options.quiet) {
         console.log(
           chalk.gray(
             `    Downloading ${this.cloner.assets.icons.length} icons...`,
           ),
         );
+      }
       for (const i of this.cloner.assets.icons) {
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -771,12 +921,13 @@ export class FrameworkWriter {
 
     // Media
     if (this.cloner.assets.media.length) {
-      if (!this.cloner.options.quiet)
+      if (!this.cloner.options.quiet) {
         console.log(
           chalk.gray(
             `    Downloading ${this.cloner.assets.media.length} media files...`,
           ),
         );
+      }
       for (const media of this.cloner.assets.media) {
         const dest = path.join(
           this.cloner.options.outputDir,
@@ -822,9 +973,7 @@ export class FrameworkWriter {
       Array.from(cssText.matchAll(urlRegex)).map(async (m) => {
         const full = m[0];
         const raw = m[2];
-        if (!raw || raw.startsWith('data:')) {
-          return { from: full, to: full };
-        }
+        if (!raw || raw.startsWith('data:')) return { from: full, to: full };
 
         let abs;
         try {
@@ -879,9 +1028,7 @@ export class FrameworkWriter {
     );
 
     let out = cssText;
-    for (const r of replacements) {
-      out = out.replace(r.from, r.to);
-    }
+    for (const r of replacements) out = out.replace(r.from, r.to);
     return out;
   }
 
@@ -893,9 +1040,7 @@ export class FrameworkWriter {
         await this.createDirectoryStructure(content, path.join(basePath, name));
       } else {
         await fs.ensureDir(path.dirname(fullPath));
-        if (typeof content === 'string') {
-          await fs.writeFile(fullPath, content);
-        }
+        if (typeof content === 'string') await fs.writeFile(fullPath, content);
       }
     }
   }
@@ -903,7 +1048,7 @@ export class FrameworkWriter {
   async generateOfflinePackageJson() {
     const packageJson = {
       name: `mirror-${this.cloner.domain}`,
-      version: '1.0.2',
+      version: '1.1.0',
       description: `Offline mirror of ${this.cloner.url}`,
       main: 'index.html',
       type: 'module',
@@ -916,7 +1061,6 @@ export class FrameworkWriter {
       author: 'Mirror Web CLI',
       license: 'MIT',
     };
-
     await fs.writeFile(
       path.join(this.cloner.options.outputDir, 'package.json'),
       JSON.stringify(packageJson, null, 2),
@@ -929,12 +1073,22 @@ export class FrameworkWriter {
 > Offline snapshot of ${this.cloner.url}
 
 Files:
-- index.html           -> JS-enabled page with all assets rewritten locally
+- index.html           -> ${
+      this.cloner.options.disableJs
+        ? 'Static (JS removed) with localized assets'
+        : 'JS-enabled page with all assets rewritten locally (hydration guard + validation)'
+    }
+
+JS mode:
+- Automatically chosen by preflight (no flags needed). Safety net validation will fallback to static if needed.
 
 Serve locally:
 - python -m http.server 8000
 - or: npm start (uses provided server.js)
 - then open http://localhost:8000
+
+Note:
+- Opening index.html directly from disk (file://) may disable Next/React hydration to preserve SSR content.
 `;
     await fs.writeFile(
       path.join(this.cloner.options.outputDir, 'README.md'),

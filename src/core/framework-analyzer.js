@@ -1,42 +1,10 @@
 /**
  * @fileoverview FrameworkAnalyzer - Intelligent Web Framework Detection Engine
- * @description Advanced framework detection system that analyzes websites to identify
- * their underlying technology stack. Supports 14+ frameworks with comprehensive pattern matching.
- * 
- * Detection Methods:
- * - Script source analysis (framework bundles, runtime files)
- * - DOM element inspection (framework-specific containers)
- * - Meta tag analysis (generator tags, framework signatures)
- * - Content pattern matching (component structures, data attributes)
- * - CSS class analysis (framework-specific styling patterns)
- * - Link href analysis (framework-specific asset paths)
- * - JSON data structure detection (framework state management)
- * 
  * @version 1.0.0
- * @author Sanjeev Saniel Kujur
- * @license MIT
  */
 
 import { load } from 'cheerio';
-import chalk from 'chalk';
 
-/**
- * @class FrameworkAnalyzer
- * @description Comprehensive framework detection and analysis system.
- * 
- * Analyzes web pages to detect underlying frameworks and their characteristics:
- * - Supports React, Vue, Angular, Next.js, Nuxt, Gatsby, Svelte, and more
- * - Provides confidence scoring based on multiple detection patterns
- * - Determines framework complexity and recommended mirroring strategies
- * - Extensible pattern-based detection system
- * 
- * @example
- * ```javascript
- * const analyzer = new FrameworkAnalyzer();
- * const analysis = await analyzer.analyze(htmlContent, 'https://example.com');
- * console.log(`Detected: ${analysis.primaryFramework.name} (${analysis.confidence}%)`);
- * ```
- */
 export class FrameworkAnalyzer {
   constructor() {
     this.frameworks = {
@@ -45,7 +13,7 @@ export class FrameworkAnalyzer {
         patterns: [
           { type: 'script', pattern: /_next\/static\// },
           { type: 'element', selector: '#__next' },
-          { type: 'script_json_id', id: '__NEXT_DATA__' }, // Next.js App Router JSON
+          { type: 'script_json_id', id: '__NEXT_DATA__' },
           { type: 'meta', name: 'generator', pattern: /next\.js/i },
           { type: 'link_href', pattern: /\/_next\/static\// },
         ],
@@ -108,7 +76,7 @@ export class FrameworkAnalyzer {
     };
   }
 
-  async analyze(html, url = '') {
+  async analyze(html, _url = '') {
     const $ = load(html);
     const results = {
       detected: [],
@@ -192,7 +160,7 @@ export class FrameworkAnalyzer {
         default:
           return false;
       }
-    } catch (error) {
+    } catch {
       return false;
     }
   }

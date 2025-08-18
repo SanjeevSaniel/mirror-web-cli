@@ -1,7 +1,6 @@
 /**
  * @fileoverview MirrorCloner - Core Website Mirroring Engine
- * @description Orchestrates mirroring: browser automation, framework detection, asset extraction, output.
- * @version 1.0.1
+ * @version 1.1.2
  */
 
 import { BrowserEngine } from './browser-engine.js';
@@ -10,30 +9,46 @@ import { FrameworkAnalyzer } from './framework-analyzer.js';
 import { FrameworkWriter } from './framework-writer.js';
 import { Display } from './display.js';
 import { Logger } from './logger.js';
+import { AIAnalyzer } from '../ai/ai-analyzer.js';
 import chalk from 'chalk';
 import { load } from 'cheerio';
 import { makeAssetFilename } from './filename-utils.js';
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
 
 export class MirrorCloner {
-  constructor(url, options = {}) {
-    this.url = url;
-    this.baseUrl = new URL(url);
+  constructor(urlStr, options = {}) {
+    this.url = urlStr;
+    this.baseUrl = new URL(urlStr);
     this.domain = this.baseUrl.hostname.replace(/^www\./, '');
 
+    // Always auto by default; engine will decide JS ON/OFF
+    const jsMode = 'auto';
+
     this.options = {
-      outputDir: options.outputDir || options.output || `./${this.domain}`,
-      debug: options.debug || false,
-      clean: options.clean || false,
+      outputDir:
+        options.outputDir ||
+        options.output ||
+        this.generateOutputDir(options.ai, this.domain),
+      debug: !!options.debug,
+      clean: !!options.clean,
       timeout: options.timeout || 120000,
       headless: options.headless !== false,
-      // Logging controls
-      quiet: options.quiet || false,
-      suppressWarnings: options.suppressWarnings !== false, // default true
+      quiet: !!options.quiet,
+      suppressWarnings: options.suppressWarnings !== false,
+      ai: !!options.ai,
+      jsMode,
+      // Working flag decided by preflight
+      disableJs: false,
       ...options,
     };
 
     if (!this.options.outputDir) {
-      this.options.outputDir = `./${this.domain}`;
+      this.options.outputDir = this.generateOutputDir(
+        this.options.ai,
+        this.domain,
+      );
     }
 
     // Initialize core components
@@ -44,7 +59,10 @@ export class MirrorCloner {
     this.display = new Display();
     this.logger = new Logger(this.options);
 
-    // Initialize data containers
+    // Optional AI
+    this.aiAnalyzer = this.options.ai ? new AIAnalyzer() : null;
+
+    // Data
     this.$ = null; // Cheerio DOM instance
     this.analysis = null; // Framework analysis results
     this.assets = {
@@ -61,6 +79,25 @@ export class MirrorCloner {
     // Microlink capture helpers
     this._microlinkHandlers = { response: null };
     this._microlinkCaptured = new Set();
+
+    // Keep track of active request interception handlers per page
+    this._reqInterceptionHandlers = new WeakMap();
+  }
+
+  // Safe pause that works with Puppeteer, Playwright, or plain timers
+  async pause(pageOrMs, maybeMs) {
+    const hasPage = typeof pageOrMs === 'object' && pageOrMs !== null;
+    const page = hasPage ? pageOrMs : null;
+    const ms = hasPage ? maybeMs : pageOrMs;
+    if (page && typeof page.waitForTimeout === 'function') {
+      try {
+        await page.waitForTimeout(ms);
+        return;
+      } catch {
+        // fallthrough to timer
+      }
+    }
+    await new Promise((res) => setTimeout(res, ms));
   }
 
   async clone() {
@@ -69,29 +106,65 @@ export class MirrorCloner {
     try {
       // Display header and configuration info
       this.display.header(
-        'Mirror Web CLI v1.0',
+        'Mirror Web CLI v1.1',
         'Advanced Website Mirroring Tool',
       );
       this.display.info(`🌐 Source: ${this.url}`);
       this.display.info(`📁 Output: ${this.options.outputDir}`);
 
-      // Step 1: Initialize browser environment
-      this.display.step(1, 7, 'Browser Setup', 'Launching headless browser...');
+      // Step 1: Preflight dual-render comparator to choose JS mode automatically
+      this.display.step(
+        1,
+        9,
+        'Preflight',
+        'Evaluating site with JS ON vs OFF to decide optimal mode...',
+      );
+      const pre = await this.preflightDualRender();
+      this.options.disableJs = pre.decision === 'off';
+      const chosenHtml = this.options.disableJs ? pre.htmlOff : pre.htmlOn;
+
+      if (this.options.debug) {
+        console.log(
+          chalk.gray(
+            `    Preflight decision: ${pre.decision.toUpperCase()} (framework=${
+              pre.frameworkHint
+            }, shadowHosts=${pre.metricsOff.shadowHosts}, customEls=${
+              pre.metricsOff.customEls
+            })`,
+          ),
+        );
+      }
+
+      // Step 2: Analyze website framework and technology stack (on chosen HTML)
+      this.display.step(
+        2,
+        9,
+        'Framework Analysis',
+        'Detecting technology stack and framework patterns...',
+      );
+      this.analysis = await this.frameworkAnalyzer.analyze(
+        chosenHtml,
+        this.url,
+      );
+      this.displayFrameworkResults();
+
+      // Step 3: Initialize browser for asset collection (single pass for assets)
+      this.display.step(3, 9, 'Browser Setup', 'Launching headless browser...');
       const page = await this.browserEngine.createPage();
 
       // Attach Microlink sniffer BEFORE navigation to capture preview assets as they load
       this.attachMicrolinkSniffer(page);
 
-      // Step 2: Load and process target website
+      // Step 4: Load and process target website for asset harvesting
       this.display.step(
-        2,
-        7,
+        4,
+        9,
         'Page Loading',
-        'Loading website content and waiting for completion...',
+        'Loading website content and harvesting assets...',
       );
       await this.loadPage(page);
 
-      // Simulate link preview hovers (e.g., "Teachyst") so previews render in DOM and network calls are made
+      // Simulate link preview hovers so previews render in DOM and network calls are made
       await this.simulateLinkPreviews(page).catch(() => {});
       await this.waitForNetworkIdle(page, 1200).catch(() => {});
       await this.waitForImagesSettled(page, 4000).catch(() => {});
@@ -114,54 +187,99 @@ export class MirrorCloner {
         }
       }
 
-      // Step 3: Analyze website framework and technology stack
-      this.display.step(
-        3,
-        7,
-        'Framework Analysis',
-        'Detecting technology stack and framework patterns...',
-      );
-      const html = await page.content();
-      this.analysis = await this.frameworkAnalyzer.analyze(html, this.url);
-      this.displayFrameworkResults();
+      // Step 5: Shadow DOM serialization (improves static snapshots)
+      await this.serializeShadowDOM(page).catch(() => {});
 
-      // Step 4: Extract all website assets
+      // Step 6: Extract all website assets using chosen HTML as baseline
       this.display.step(
-        4,
-        7,
+        5,
+        9,
         'Asset Extraction',
         'Downloading and processing assets...',
       );
-      this.$ = load(html);
+      const htmlForExtraction = await page.content().catch(() => chosenHtml);
+      // Prefer current page DOM (richer with computed asset injections); fallback to chosen preflight HTML
+      this.$ = load(htmlForExtraction || chosenHtml);
       await this.assetManager.extractAllAssets();
 
-      // Step 5: AI-powered analysis (optional)
-      this.display.step(
-        5,
-        7,
-        'AI Analysis',
-        'Skipping AI analysis for core functionality...',
-      );
-
-      // Step 6: Process framework-specific elements
+      // Step 7: AI-powered analysis (optional)
       this.display.step(
         6,
-        7,
-        'Framework Processing',
-        'Processing framework-specific code structures...',
+        9,
+        'AI Analysis',
+        this.options.ai
+          ? 'Using OpenAI GPT-4o for insights...'
+          : 'Skipping AI analysis...',
       );
-      await this.processFrameworkSpecific(html);
+      if (this.options.ai && this.aiAnalyzer?.isEnabled) {
+        try {
+          const ai = await this.aiAnalyzer.analyzeWebsite(
+            this.url,
+            htmlForExtraction || chosenHtml,
+            this.analysis,
+            this.assets,
+          );
+          this.analysis.aiInsights = ai.aiInsights;
+          this.analysis.enhanced = ai.enhanced;
+          this.aiAnalyzer.displayAnalysis({
+            ...this.analysis,
+            aiInsights: ai.aiInsights,
+            enhanced: ai.enhanced,
+          });
+        } catch (e) {
+          if (this.options.debug)
+            console.log(chalk.yellow('⚠️ AI analysis error:'), e?.message || e);
+        }
+      }
 
-      // Step 7: Generate final offline-ready output
+      // Step 8: Generate output based on decided JS mode
       this.display.step(
         7,
-        7,
+        9,
         'Output Generation',
-        'Creating offline-ready website structure...',
+        this.options.disableJs
+          ? 'Creating static snapshot (JS disabled)...'
+          : 'Creating JS-enabled offline output...',
       );
       await this.frameworkWriter.generateOfflineProject();
 
-      // Cleanup and finalization
+      // Step 9: Offline validation and auto-fallback (safety net)
+      let autoFallenBack = false;
+      if (!this.options.disableJs) {
+        this.display.step(
+          8,
+          9,
+          'Offline Validation',
+          'Verifying offline rendering (http and file protocols)...',
+        );
+        const validHttp = await this.validateOfflineOutputHttp();
+        const validFile = await this.validateOfflineOutputFile();
+        const valid = validHttp && validFile;
+
+        if (!valid) {
+          this.display.warning(
+            `Offline validation detected a blank/empty root (${
+              validHttp ? 'http OK' : 'http blank'
+            }, ${
+              validFile ? 'file OK' : 'file blank'
+            }). Applying auto static snapshot fallback...`,
+          );
+          this.options.disableJs = true;
+          await this.frameworkWriter.writeIndexHtmlOnly();
+          autoFallenBack = true;
+        }
+      }
+
+      // Finalize
+      this.display.step(
+        9,
+        9,
+        'Finalize',
+        autoFallenBack
+          ? 'Auto-fallback applied (static snapshot).'
+          : 'Output ready.',
+      );
+
       await this.browserEngine.close();
 
       // Display success summary
@@ -188,6 +306,263 @@ export class MirrorCloner {
     }
   }
 
+  // --- Preflight: decide JS ON vs OFF automatically ---
+  async preflightDualRender() {
+    // Pass A: JS ON (normal)
+    const pageOn = await this.browserEngine.createPage();
+    const consoleOn = [];
+    const collectConsole = (msg) => {
+      try {
+        const t = msg.type ? msg.type() : 'log';
+        consoleOn.push(`[${t}] ${msg.text?.() || msg.text()}`);
+      } catch {
+        // ignore
+      }
+    };
+    pageOn.on('console', collectConsole);
+
+    await pageOn.goto(this.url, {
+      waitUntil: 'domcontentloaded',
+      timeout: this.options.timeout,
+    });
+    await this.waitForRootReady(pageOn);
+    // Lightweight settle
+    await this.pause(pageOn, 500);
+    const metricsOn = await this._collectPreflightMetrics(pageOn);
+    const htmlOn = await pageOn.content();
+    await pageOn.close();
+
+    // Pass B: JS "OFF" by blocking script requests
+    const pageOff = await this.browserEngine.createPage();
+    await this._blockScripts(pageOff, true);
+    const consoleOff = [];
+    const collectConsoleOff = (msg) => {
+      try {
+        const t = msg.type ? msg.type() : 'log';
+        consoleOff.push(`[${t}] ${msg.text?.() || msg.text()}`);
+      } catch {}
+    };
+    pageOff.on('console', collectConsoleOff);
+
+    await pageOff.goto(this.url, {
+      waitUntil: 'domcontentloaded',
+      timeout: this.options.timeout,
+    });
+    await this.waitForRootReady(pageOff).catch(() => {});
+    await this.pause(pageOff, 300);
+    const metricsOff = await this._collectPreflightMetrics(pageOff);
+    const htmlOff = await pageOff.content();
+    await pageOff.close();
+
+    // Framework hint: detect Next.js in htmlOn or htmlOff
+    const frameworkHint =
+      this._frameworkHint(htmlOn || '') || this._frameworkHint(htmlOff || '');
+
+    // Decision rules
+    const hydrationError =
+      consoleOn
+        .join('\n')
+        .match(/Hydration failed|did not match|Minified React error/i) !=
+        null ||
+      metricsOn.overlayPresent ||
+      (metricsOn.blank && frameworkHint === 'nextjs');
+
+    let decision = 'on'; // default prefer JS ON for richer sites
+
+    if (frameworkHint === 'nextjs' && hydrationError) {
+      decision = 'off';
+    } else if (!metricsOn.blank && metricsOff.blank) {
+      // JS ON looks healthy, JS OFF is blank -> ON
+      decision = 'on';
+    } else if (metricsOn.blank && !metricsOff.blank) {
+      // JS ON blanks (likely hydration wiping) -> OFF
+      decision = 'off';
+    } else if (!metricsOn.blank && !metricsOff.blank) {
+      // Both render; bias using shadow/custom elements density (prefer ON if complex)
+      if (
+        metricsOff.shadowHosts > 25 ||
+        metricsOff.customEls > 40 ||
+        metricsOff.shadowHosts + metricsOff.customEls >
+          Math.max(60, (metricsOn.nodeCount || 0) * 0.02)
+      ) {
+        decision = 'on';
+      } else {
+        decision = 'on'; // still prefer ON when both are fine
+      }
+    } else {
+      // Both look blank; for safety choose OFF to preserve SSR if present
+      decision = 'off';
+    }
+
+    if (this.options.debug) {
+      console.log(
+        chalk.gray(
+          `    Preflight metrics: ON(blank=${metricsOn.blank}, text=${metricsOn.textLen}, overlay=${metricsOn.overlayPresent}) | OFF(blank=${metricsOff.blank}, text=${metricsOff.textLen}, shadow=${metricsOff.shadowHosts}, custom=${metricsOff.customEls})`,
+        ),
+      );
+    }
+
+    return { decision, htmlOn, htmlOff, metricsOn, metricsOff, frameworkHint };
+  }
+
+  _frameworkHint(html) {
+    try {
+      if (!html) return null;
+      if (html.includes('id="__NEXT_DATA__"') || /\/_next\//i.test(html))
+        return 'nextjs';
+      if (/<div id="root">/.test(html)) return 'react';
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async _collectPreflightMetrics(page) {
+    try {
+      return await page.evaluate(() => {
+        function getRoot() {
+          return (
+            document.querySelector('#__next, #root, [data-reactroot]') ||
+            document.body
+          );
+        }
+        function rectArea(el) {
+          try {
+            const r = el.getBoundingClientRect();
+            return Math.max(0, r.width) * Math.max(0, r.height);
+          } catch {
+            return 0;
+          }
+        }
+        function countCustomElements() {
+          try {
+            const all = Array.from(document.querySelectorAll('*'));
+            return all.filter((el) => el.tagName.includes('-')).length;
+          } catch {
+            return 0;
+          }
+        }
+        function countShadowHosts() {
+          let n = 0;
+          try {
+            document.querySelectorAll('*').forEach((el) => {
+              if (el.shadowRoot) n++;
+            });
+          } catch {}
+          return n;
+        }
+        const root = getRoot();
+        const htmlLen = (root?.innerHTML || '').trim().length;
+        const textLen = (root?.innerText || '').replace(/\s+/g, '').length;
+        const area = root ? rectArea(root) : 0;
+        const style = root ? getComputedStyle(root) : null;
+        const hidden =
+          !root ||
+          (style &&
+            (style.display === 'none' || style.visibility === 'hidden'));
+        const overlayPresent = !!document.querySelector(
+          '[data-nextjs-dialog-overlay]',
+        );
+        const nodeCount = document.querySelectorAll('*').length;
+        const blank = hidden || htmlLen < 100 || (textLen < 10 && area < 1500); // small/empty
+        return {
+          blank,
+          htmlLen,
+          textLen,
+          area,
+          hidden,
+          overlayPresent,
+          nodeCount,
+          shadowHosts: countShadowHosts(),
+          customEls: countCustomElements(),
+        };
+      });
+    } catch {
+      return {
+        blank: false,
+        htmlLen: 0,
+        textLen: 0,
+        area: 0,
+        hidden: false,
+        overlayPresent: false,
+        nodeCount: 0,
+        shadowHosts: 0,
+        customEls: 0,
+      };
+    }
+  }
+
+  // Robust script blocking for Puppeteer (avoids "Request is already handled!" by ensuring one handler and single resolution)
+  async _blockScripts(page, enabled) {
+    try {
+      // Puppeteer-style interception
+      if (page.setRequestInterception) {
+        // Remove any existing handler we attached earlier
+        const existing = this._reqInterceptionHandlers.get(page);
+        if (existing) {
+          try {
+            page.off('request', existing);
+          } catch {}
+          this._reqInterceptionHandlers.delete(page);
+        }
+
+        await page.setRequestInterception(enabled);
+
+        if (enabled) {
+          const handler = (req) => {
+            try {
+              const type =
+                typeof req.resourceType === 'function'
+                  ? req.resourceType()
+                  : '';
+              if (type === 'script') {
+                // Abort script requests to simulate JS OFF
+                // Never call continue() afterwards for this request
+                return req.abort('blockedbyclient').catch(() => {});
+              }
+              // Allow other resource types
+              return req.continue().catch(() => {});
+            } catch {
+              // Swallow any errors to avoid double-handling
+            }
+          };
+          page.on('request', handler);
+          this._reqInterceptionHandlers.set(page, handler);
+        }
+        return;
+      }
+
+      // Playwright-style routing (best-effort; noop if not available)
+      if (page.route) {
+        // Note: To avoid stacking routes we'd need unroute. Since our main env is Puppeteer,
+        // we keep this light and avoid adding multiple routes.
+        if (enabled) {
+          await page.route('**/*', (route) => {
+            try {
+              const req = route.request();
+              const type =
+                req && typeof req.resourceType === 'function'
+                  ? req.resourceType()
+                  : '';
+              if (type === 'script') return route.abort();
+              return route.continue();
+            } catch {
+              try {
+                return route.continue();
+              } catch {}
+            }
+          });
+        } else if (page.unroute) {
+          try {
+            await page.unroute('**/*');
+          } catch {}
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   async loadPage(page) {
     await page.goto(this.url, {
       waitUntil: 'domcontentloaded',
@@ -198,6 +573,44 @@ export class MirrorCloner {
     await this.scrollToBottomAndLoad(page);
     await this.waitForImagesSettled(page, 8000);
     await this.waitForNetworkIdle(page, 1500).catch(() => {});
+  }
+
+  // Serialize shadow DOM into Declarative Shadow DOM (<template shadowroot="open">)
+  // so static snapshots include content of web components.
+  async serializeShadowDOM(page) {
+    await page.evaluate(() => {
+      try {
+        const hosts = [];
+        document.querySelectorAll('*').forEach((el) => {
+          if (el.shadowRoot) hosts.push(el);
+        });
+
+        hosts.forEach((host) => {
+          if (host.querySelector(':scope > template[shadowroot]')) return;
+
+          const tmpl = document.createElement('template');
+          const mode =
+            host.shadowRoot && host.shadowRoot.mode
+              ? host.shadowRoot.mode
+              : 'open';
+          tmpl.setAttribute(
+            'shadowroot',
+            mode === 'closed' ? 'closed' : 'open',
+          );
+
+          let html = '';
+          try {
+            html = host.shadowRoot ? host.shadowRoot.innerHTML : '';
+          } catch (e) {
+            html = '';
+          }
+          tmpl.innerHTML = html;
+          host.appendChild(tmpl);
+        });
+      } catch (e) {
+        // ignore
+      }
+    });
   }
 
   // Network sniffer for Microlink assets (images and JSON to discover screenshot URLs)
@@ -224,7 +637,6 @@ export class MirrorCloner {
         this._microlinkCaptured.add(u);
 
         if (ctype.startsWith('image/')) {
-          // Direct image payload; store as buffer now
           const buf = await response.buffer().catch(() => null);
           if (!buf || !buf.length) return;
           const filename = this.generateFilename(u, 'images');
@@ -240,7 +652,6 @@ export class MirrorCloner {
           return;
         }
 
-        // JSON payload: try to extract the actual screenshot/image url
         if (ctype.includes('application/json')) {
           const text = await response.text().catch(() => '');
           if (!text) return;
@@ -259,7 +670,6 @@ export class MirrorCloner {
             null;
 
           if (target) {
-            // Queue this target image for normal download later
             const abs = this.resolveUrl(target);
             const filename = this.generateFilename(abs, 'images');
             if (!this.assets.images.find((x) => x.url === abs)) {
@@ -298,33 +708,6 @@ export class MirrorCloner {
     try {
       await page.evaluate(() => window.scrollTo(0, 0));
 
-      // Specifically target "Teachyst" anchors if present
-      const teachystHandles = await page.$x(
-        "//a[contains(., 'Teachyst') or contains(@href, 'teachyst')]",
-      );
-      for (const h of teachystHandles) {
-        try {
-          await h.evaluate((el) =>
-            el.scrollIntoView({ block: 'center', inline: 'center' }),
-          );
-          await page.evaluate((el) => {
-            const r = el.getBoundingClientRect();
-            const opts = {
-              bubbles: true,
-              cancelable: true,
-              clientX: r.left + 4,
-              clientY: r.top + 4,
-            };
-            el.dispatchEvent(new MouseEvent('pointerenter', opts));
-            el.dispatchEvent(new MouseEvent('mouseover', opts));
-            el.dispatchEvent(new MouseEvent('mouseenter', opts));
-          }, h);
-          await h.hover();
-          await page.waitForTimeout(700);
-        } catch {}
-      }
-
-      // Generic hover triggers (limited count)
       const selectors = [
         '[data-hovercard]',
         '[data-popover]',
@@ -344,25 +727,13 @@ export class MirrorCloner {
               el.scrollIntoView({ block: 'center', inline: 'center' });
           });
           await h.hover();
-          await page.evaluate((el) => {
-            const r = el.getBoundingClientRect();
-            const opts = {
-              bubbles: true,
-              cancelable: true,
-              clientX: r.left + 2,
-              clientY: r.top + 2,
-            };
-            el.dispatchEvent(new MouseEvent('pointerenter', opts));
-            el.dispatchEvent(new MouseEvent('mouseover', opts));
-            el.dispatchEvent(new MouseEvent('mouseenter', opts));
-          }, h);
           await Promise.race([
             page
               .waitForResponse((r) => /microlink\.io/.test(r.url()), {
-                timeout: 1200,
+                timeout: 800,
               })
               .catch(() => {}),
-            page.waitForTimeout(180),
+            this.pause(page, 150),
           ]);
         } catch {}
       }
@@ -500,14 +871,14 @@ export class MirrorCloner {
     };
 
     const onRequest = (req) => {
-      const url = req.url();
-      if (url.startsWith('ws:') || url.startsWith('wss:')) return;
+      const reqUrl = req.url();
+      if (reqUrl.startsWith('ws:') || reqUrl.startsWith('wss:')) return;
       inflight++;
     };
 
     const onDone = (req) => {
-      const url = req.url();
-      if (url.startsWith('ws:') || url.startsWith('wss:')) return;
+      const reqUrl = req.url();
+      if (reqUrl.startsWith('ws:') || reqUrl.startsWith('wss:')) return;
       inflight = Math.max(0, inflight - 1);
       tick();
     };
@@ -551,9 +922,13 @@ export class MirrorCloner {
 
   getMirroringStrategy(framework) {
     const strategies = {
-      nextjs: 'Preserve DOM; localize assets for exact Next.js look',
+      nextjs: this.options.disableJs
+        ? 'Static snapshot (JS removed) to avoid hydration/blank page'
+        : 'Preserve DOM; localize assets for exact Next.js look',
+      react: this.options.disableJs
+        ? 'Static snapshot (JS removed) to preserve SSR DOM'
+        : 'Preserve DOM; localize assets for exact UI',
       gatsby: 'Gatsby static DOM with localized assets',
-      react: 'Preserve DOM; localize assets for exact UI',
       vue: 'Preserve DOM; localize assets for exact UI',
       angular: 'Preserve DOM; localize assets for exact UI',
     };
@@ -561,7 +936,10 @@ export class MirrorCloner {
   }
 
   getOutputType() {
-    return 'HTML/CSS/JS (Offline-Ready)';
+    const willStrip = this.options.disableJs;
+    return willStrip
+      ? 'Static HTML (JS removed) + CSS/Images'
+      : 'HTML/CSS/JS (Offline-Ready)';
   }
 
   getAssetStats() {
@@ -579,20 +957,196 @@ export class MirrorCloner {
     };
   }
 
-  resolveUrl(url) {
-    if (!url) return '';
+  resolveUrl(u) {
+    if (!u) return '';
     try {
-      if (url.startsWith('http') || url.startsWith('data:')) return url;
-      if (url.startsWith('//')) return this.baseUrl.protocol + url;
-      if (url.startsWith('/'))
-        return `${this.baseUrl.protocol}//${this.baseUrl.host}${url}`;
-      return new URL(url, this.url).href;
+      if (u.startsWith('http') || u.startsWith('data:')) return u;
+      if (u.startsWith('//')) return this.baseUrl.protocol + u;
+      if (u.startsWith('/'))
+        return `${this.baseUrl.protocol}//${this.baseUrl.host}${u}`;
+      return new URL(u, this.url).href;
     } catch {
-      return url;
+      return u;
     }
   }
 
-  generateFilename(url, category = 'bin') {
-    return makeAssetFilename(this.resolveUrl(url), category);
+  generateFilename(u, category = 'bin') {
+    return makeAssetFilename(this.resolveUrl(u), category);
+  }
+
+  generateOutputDir(aiEnabled, domain) {
+    const suffix = aiEnabled ? '-ai-enhanced' : '-standard';
+    return `./${domain}${suffix}`;
+  }
+
+  // --- Offline validation helpers (safety net) ---
+  async validateOfflineOutputHttp() {
+    const { server, baseUrl } = await this._startStaticServer(
+      this.options.outputDir,
+    );
+    try {
+      const page = await this.browserEngine.createPage();
+      await page.goto(baseUrl + '/index.html', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      const ok = await this._evaluateOfflineHealth(page);
+      await page.close();
+      return ok;
+    } catch (e) {
+      if (this.options.debug) {
+        console.log(chalk.yellow('⚠️ HTTP validation error:'), e.message);
+      }
+      // On validation errors, prefer to accept output (don’t fallback aggressively)
+      return true;
+    } finally {
+      await new Promise((res) => server.close(() => res()));
+    }
+  }
+
+  async validateOfflineOutputFile() {
+    try {
+      const page = await this.browserEngine.createPage();
+      const fileUrl =
+        'file://' + path.resolve(this.options.outputDir, 'index.html');
+      await page.goto(fileUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      const ok = await this._evaluateOfflineHealth(page);
+      await page.close();
+      return ok;
+    } catch (e) {
+      if (this.options.debug) {
+        console.log(chalk.yellow('⚠️ file:// validation error:'), e.message);
+      }
+      // Treat file validation failures as a signal to fallback
+      return false;
+    }
+  }
+
+  async _evaluateOfflineHealth(page) {
+    const delays = [120, 700, 2200, 3500];
+    for (const d of delays) {
+      await this.pause(page, d);
+      /* eslint-disable no-await-in-loop */
+      const status = await page.evaluate(() => {
+        function getRoot() {
+          return (
+            document.querySelector('#__next, #root, [data-reactroot]') ||
+            document.body
+          );
+        }
+        function rectArea(el) {
+          try {
+            const r = el.getBoundingClientRect();
+            return Math.max(0, r.width) * Math.max(0, r.height);
+          } catch {
+            return 0;
+          }
+        }
+        const root = getRoot();
+        const htmlLen = (root?.innerHTML || '').trim().length;
+        const textLen = (root?.innerText || '').replace(/\s+/g, '').length;
+        const area = root ? rectArea(root) : 0;
+        const style = root ? getComputedStyle(root) : null;
+        const hidden =
+          !root ||
+          (style &&
+            (style.display === 'none' || style.visibility === 'hidden'));
+        const blank = hidden || htmlLen < 100 || (textLen < 10 && area < 1500); // small/empty
+        return { blank, htmlLen, textLen, area, hidden };
+      });
+      if (!status.blank) return true;
+    }
+    return false;
+  }
+
+  async _startStaticServer(rootDir) {
+    const root = path.resolve(rootDir);
+
+    const server = http.createServer((req, res) => {
+      try {
+        const reqUrl = new URL(req.url, 'http://localhost');
+        let pathname = decodeURIComponent(reqUrl.pathname);
+        if (pathname === '/') pathname = '/index.html';
+        const filePath = this._safeJoin(root, '.' + pathname);
+
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          this._serveFile(res, filePath);
+          return;
+        }
+
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+          const indexInDir = path.join(filePath, 'index.html');
+          if (fs.existsSync(indexInDir)) {
+            this._serveFile(res, indexInDir);
+            return;
+          }
+        }
+
+        const fallback = path.join(root, 'index.html');
+        if (fs.existsSync(fallback)) {
+          this._serveFile(res, fallback);
+          return;
+        }
+
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('404 Not Found');
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('500 Internal Server Error\n' + (e?.message || ''));
+      }
+    });
+
+    await new Promise((res) => server.listen(0, () => res()));
+    const port = server.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    return { server, baseUrl };
+  }
+
+  _safeJoin(root, p) {
+    const resolved = path.resolve(root, p);
+    if (!resolved.startsWith(root)) return root;
+    return resolved;
+  }
+
+  _serveFile(res, filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mime =
+      {
+        '.html': 'text/html; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.mjs': 'application/javascript; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.avif': 'image/avif',
+        '.gif': 'image/gif',
+        '.ico': 'image/x-icon',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.ogg': 'video/ogg',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.m4a': 'audio/mp4',
+        '.woff2': 'font/woff2',
+        '.woff': 'font/woff',
+        '.ttf': 'font/ttf',
+        '.otf': 'font/otf',
+        '.eot': 'application/vnd.ms-fontobject',
+        '.txt': 'text/plain; charset=utf-8',
+        '.map': 'application/json; charset=utf-8',
+      }[ext] || 'application/octet-stream';
+
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=60',
+    });
+    fs.createReadStream(filePath).pipe(res);
   }
 }

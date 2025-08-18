@@ -32,6 +32,28 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 - Offline-ready websites with localized resources
 - **Next.js/React error handling** for graceful offline operation
 
+🆕 **Auto-Differentiated Output Directories**
+
+- **Standard mirroring**: Creates `./domain-standard/` directories
+- **AI-enhanced mirroring**: Creates `./domain-ai-enhanced/` directories  
+- **Easy comparison**: Side-by-side analysis of different approaches
+- **Organized workflow**: Never overwrite previous results
+
+## 🛠️ Recent Improvements
+
+✅ **Enhanced Next.js/React Support**
+
+- Fixed hydration mismatch errors causing "Application error" messages
+- Improved script preload handling for missing chunks
+- Enhanced JavaScript content rewriting for better offline compatibility
+- Robust error boundaries for graceful degradation
+
+✅ **Smart Output Organization**
+
+- Auto-differentiated directories prevent accidental overwrites
+- Easy comparison between standard and AI-enhanced results
+- Professional project organization
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -48,11 +70,44 @@ npx mirror-web-cli https://example.com
 
 For AI-powered website analysis, you'll need an **OpenAI API key**:
 
-```bash
-# Option 1: Set environment variable (recommended)
-export OPENAI_API_KEY="sk-proj-your-openai-key-here"
+#### **Option 1: Environment Variable (Recommended)**
 
-# Option 2: Pass as parameter
+**Windows PowerShell:**
+
+```powershell
+$env:OPENAI_API_KEY="sk-proj-your-openai-key-here"
+```
+
+**Windows Command Prompt:**
+
+```cmd
+set OPENAI_API_KEY=sk-proj-your-openai-key-here
+```
+
+**macOS/Linux (Bash/Zsh):**
+
+```bash
+export OPENAI_API_KEY="sk-proj-your-openai-key-here"
+```
+
+**Permanent Setup (recommended for regular use):**
+
+Windows (PowerShell as Administrator):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-your-openai-key-here', 'User')
+```
+
+macOS/Linux (add to ~/.bashrc or ~/.zshrc):
+
+```bash
+echo 'export OPENAI_API_KEY="sk-proj-your-openai-key-here"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### **Option 2: Command Line Parameter**
+
+```bash
 mirror-web-cli https://example.com --ai --openai-key "sk-proj-your-key-here"
 ```
 
@@ -65,31 +120,44 @@ mirror-web-cli https://example.com --ai --openai-key "sk-proj-your-key-here"
 ### Basic Usage
 
 ```bash
-# Mirror any website with framework preservation
+# Standard mirroring (outputs to example.com-standard)
 mirror-web-cli https://example.com
+
+# AI-enhanced mirroring (outputs to example.com-ai-enhanced)
+mirror-web-cli https://example.com --ai
 
 # Clean mirror without tracking scripts
 mirror-web-cli https://react-site.com --clean
 
-# Custom output directory
+# Custom output directory (overrides automatic naming)
 mirror-web-cli https://vue-app.com -o ./my-project
 
 # Debug mode with detailed logging
 mirror-web-cli https://complex-site.com --debug
 ```
 
+#### 📁 Auto-Differentiated Output Directories
+
+Mirror Web CLI automatically creates different output directories based on the analysis method:
+
+- **Standard**: `./domain-standard` (e.g., `./example.com-standard`)
+- **AI-Enhanced**: `./domain-ai-enhanced` (e.g., `./example.com-ai-enhanced`)
+- **Custom**: Uses your specified path with `-o` flag
+
+This allows easy comparison between different analysis approaches and organized project management.
+
 ### Serving the Output
 
 ```bash
 # The tool generates a complete project structure
-cd ./example.com
+cd ./example.com-standard  # or ./example.com-ai-enhanced
 
-# Use the built-in server (if available)
-npm start
-
-# Or use any static server
+# Use any static server to serve the mirrored site
 python -m http.server 8000
 # Open http://localhost:8000
+
+# Or use Node.js static server
+npx serve .
 ```
 
 ## 🎯 How It Works
@@ -178,6 +246,7 @@ Verification
   ```Plaintext
   [MW rewrite] imagesrcset: /_next/image?url=... -> ./assets/images/asset_dc814d3448.png 1x, ...
   ```
+
 - Open the local asset path (e.g., [http://localhost:8000/assets/images/asset_dc814d3448.png](http://localhost:8000/assets/images/asset_dc814d3448.png))
 
 ### Troubleshooting (quick)
@@ -254,7 +323,7 @@ The tool checks for OpenAI API keys in this order:
 ```bash
 # Simple static site
 mirror-web-cli https://example.com
-# → Creates: ./example.com/ with complete offline functionality
+# → Creates: ./example.com-standard/ with complete offline functionality
 ```
 
 ### React Application
@@ -262,15 +331,16 @@ mirror-web-cli https://example.com
 ```bash
 # React SPA with complex routing
 mirror-web-cli https://react-app.com --clean
-# → Preserves React structure, removes tracking, offline-ready
+# → Creates: ./react-app.com-standard/ preserves React structure, removes tracking, offline-ready
 ```
 
 ### Next.js Website
 
 ```bash
-# Next.js with image optimization
-mirror-web-cli https://nextjs-site.com -o ./my-nextjs-mirror
-# → Handles /_next/image URLs, preserves SSR structure
+# Next.js with image optimization and error handling
+mirror-web-cli https://nextjs-site.com --clean
+# → Creates: ./nextjs-site.com-standard/ with enhanced Next.js compatibility
+# → Handles /_next/image URLs, fixes hydration issues, preserves SSR structure
 ```
 
 ### E-commerce Site
@@ -278,20 +348,35 @@ mirror-web-cli https://nextjs-site.com -o ./my-nextjs-mirror
 ```bash
 # Complex site with lots of assets
 mirror-web-cli https://shop.example.com --debug --clean
-# → Detailed logging, removes analytics, preserves functionality
+# → Creates: ./shop.example.com-standard/ with detailed logging, removes analytics
 ```
 
 ### AI-Powered Analysis (OpenAI)
 
+**Windows PowerShell:**
+
+```powershell
+# Set environment variable first
+$env:OPENAI_API_KEY="sk-proj-your-openai-key-here"
+mirror-web-cli https://complex-app.com --ai --clean
+# → Creates: ./complex-app.com-ai-enhanced/ with OpenAI GPT-4o framework analysis
+```
+
+**macOS/Linux:**
+
 ```bash
-# Using environment variable (recommended)
+# Set environment variable first
 export OPENAI_API_KEY="sk-proj-your-openai-key-here"
 mirror-web-cli https://complex-app.com --ai --clean
-# → OpenAI GPT-4o analyzes framework patterns and optimizes conversion strategy
+# → Creates: ./complex-app.com-ai-enhanced/ with OpenAI GPT-4o framework analysis
+```
 
-# Using command line parameter
-mirror-web-cli https://react-app.com --ai --openai-key "sk-proj-..." --clean
-# → One-time OpenAI API key usage for enhanced analysis
+**Cross-platform (using CLI parameter):**
+
+```bash
+# Compare standard vs AI-enhanced outputs
+mirror-web-cli https://react-app.com --clean        # → ./react-app.com-standard/
+mirror-web-cli https://react-app.com --ai --clean   # → ./react-app.com-ai-enhanced/
 ```
 
 ### Development Workflow
@@ -461,6 +546,70 @@ npm run dev -- https://example.com --debug
 - Use `--debug` to see detection process
 - Framework patterns may need updating for newer versions
 - Manual inspection may be needed for custom frameworks
+
+#### Environment Variable Issues
+
+**Windows PowerShell "export command not found":**
+
+```powershell
+# ❌ Wrong (Bash syntax)
+export OPENAI_API_KEY="sk-..."
+
+# ✅ Correct (PowerShell syntax)
+$env:OPENAI_API_KEY="sk-..."
+```
+
+**Windows Command Prompt:**
+
+```cmd
+# ✅ Correct (CMD syntax)
+set OPENAI_API_KEY=sk-your-key-here
+```
+
+**Verify environment variable is set:**
+
+```powershell
+# PowerShell
+echo $env:OPENAI_API_KEY
+
+# Command Prompt  
+echo %OPENAI_API_KEY%
+
+# Bash/Zsh
+echo $OPENAI_API_KEY
+```
+
+#### AI Features Not Working
+
+- Verify OpenAI API key is set correctly (see above)
+- Check API key format: Must start with `sk-`
+- Ensure sufficient OpenAI credits/quota
+- Use `--debug` to see AI analysis process
+
+#### Blank Screen or Empty Content
+
+**Iframe-based sites (like hitesh.ai):**
+
+- Some sites are just iframe wrappers pointing to external URLs
+- Example: `hitesh.ai` loads `hiteshchoudhary.com` in an iframe
+- **Solution**: Mirror the actual content site directly:
+
+  ```bash
+  # Instead of the wrapper
+  mirror-web-cli https://hitesh.ai
+  
+  # Mirror the actual content
+  mirror-web-cli https://hiteshchoudhary.com --clean
+  ```
+
+**Sites with heavy JavaScript dependencies:**
+
+- Some React/Next.js sites may need additional processing
+- Try AI-enhanced mode for better framework handling:
+
+  ```bash
+  mirror-web-cli https://your-site.com --ai --clean
+  ```
 
 ### Getting Help
 
