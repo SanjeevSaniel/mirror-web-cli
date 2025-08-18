@@ -69,84 +69,159 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 
 ## 🚀 Quick Start
 
-### Installation
+### Installation Options
+
+#### **Option 1: Global Installation (Recommended)**
 
 ```bash
-# Global installation (recommended)
+# Install globally from npm registry
 npm install -g mirror-web-cli
 
-# Or run directly with npx (no installation required)
+# Verify installation
+mirror-web-cli --version
+```
+
+#### **Option 2: One-time Usage with npx**
+
+```bash
+# Run directly without installation
 npx mirror-web-cli https://example.com
 ```
 
-### OpenAI API Setup (Optional)
+#### **Option 3: Development Installation**
 
-For AI-powered website analysis, you'll need an **OpenAI API key**:
+```bash
+# Clone repository for development/customization
+git clone https://github.com/SanjeevSaniel/mirror-web-cli.git
+cd mirror-web-cli
+npm install
 
-#### **Option 1: Environment Variable (Recommended)**
+# Run from source
+node src/cli.js https://example.com
+```
+
+### OpenAI API Key Setup (Required for AI Features)
+
+**🚨 IMPORTANT**: Users must set up their OpenAI API key in their terminal environment before using AI features. The package does NOT include pre-configured API keys.
+
+#### **Step 1: Get OpenAI API Key**
+
+1. Visit [OpenAI Platform](https://platform.openai.com/api-keys)
+2. Create account and generate API key
+3. Copy your API key (starts with `sk-`)
+
+#### **Step 2: Set Environment Variable (REQUIRED)**
 
 **Windows PowerShell:**
 
 ```powershell
-$env:OPENAI_API_KEY="sk-proj-your-openai-key-here"
+# Temporary (current session only)
+$env:OPENAI_API_KEY="sk-your-api-key-here"
+
+# Permanent (recommended)
+[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-api-key-here', 'User')
+
+# Verify setup
+echo $env:OPENAI_API_KEY
 ```
 
 **Windows Command Prompt:**
 
 ```cmd
-set OPENAI_API_KEY=sk-proj-your-openai-key-here
+# Temporary (current session only)
+set OPENAI_API_KEY=sk-your-api-key-here
+
+# Verify setup
+echo %OPENAI_API_KEY%
 ```
 
 **macOS/Linux (Bash/Zsh):**
 
 ```bash
-export OPENAI_API_KEY="sk-proj-your-openai-key-here"
-```
+# Temporary (current session only)
+export OPENAI_API_KEY="sk-your-api-key-here"
 
-**Permanent Setup (recommended for regular use):**
-
-Windows (PowerShell as Administrator):
-
-```powershell
-[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-your-openai-key-here', 'User')
-```
-
-macOS/Linux (add to ~/.bashrc or ~/.zshrc):
-
-```bash
-echo 'export OPENAI_API_KEY="sk-proj-your-openai-key-here"' >> ~/.bashrc
+# Permanent (add to ~/.bashrc or ~/.zshrc)
+echo 'export OPENAI_API_KEY="sk-your-api-key-here"' >> ~/.bashrc
 source ~/.bashrc
+
+# Verify setup
+echo $OPENAI_API_KEY
 ```
 
-#### **Option 2: Command Line Parameter**
+#### **Alternative: Command Line Parameter**
 
 ```bash
-mirror-web-cli https://example.com --ai --openai-key "sk-proj-your-key-here"
+# Pass API key directly (not recommended for security)
+mirror-web-cli https://example.com --ai --openai-key "sk-your-key-here"
+```
+
+#### **Step 3: Verify Setup**
+
+```bash
+# Test basic functionality (should work without API key)
+mirror-web-cli https://example.com --debug
+
+# Test AI functionality (requires API key)
+mirror-web-cli https://example.com --ai --debug
 ```
 
 **Requirements:**
 
-- Only **OpenAI API keys** are supported (must start with `sk-`)
-- Uses OpenAI GPT-4o model for intelligent analysis
-- **Get your API key**: [OpenAI Platform](https://platform.openai.com/api-keys)
+- ✅ **OpenAI API keys only** (must start with `sk-`)
+- ✅ **GPT-4o model** for intelligent analysis  
+- ✅ **Active OpenAI account** with billing setup
+- ✅ **Terminal environment setup** (no pre-configured keys)
 
-### Basic Usage
+### Basic Usage (After Installation)
+
+#### **Standard Website Mirroring**
 
 ```bash
-# Standard mirroring (outputs to example.com-standard)
+# Basic mirroring (no AI, works immediately after install)
 mirror-web-cli https://example.com
+# → Creates: ./example.com-standard/
 
-# AI-enhanced mirroring (outputs to example.com-ai-enhanced)
-mirror-web-cli https://example.com --ai
-
-# Clean mirror without tracking scripts
+# Clean mirroring (removes tracking scripts)
 mirror-web-cli https://react-site.com --clean
+# → Creates: ./react-site.com-standard/
 
-# Custom output directory (overrides automatic naming)
+# Custom output directory
 mirror-web-cli https://vue-app.com -o ./my-project
+# → Creates: ./my-project/
 
 # Debug mode with detailed logging
 mirror-web-cli https://complex-site.com --debug
+# → Shows detailed processing information
+```
+
+#### **AI-Enhanced Mirroring (Requires API Key Setup)**
+
+```bash
+# FIRST: Set up API key (see above section)
+export OPENAI_API_KEY="sk-your-api-key-here"  # Linux/macOS
+# or
+$env:OPENAI_API_KEY="sk-your-api-key-here"    # Windows PowerShell
+
+# THEN: Use AI features
+mirror-web-cli https://example.com --ai
+# → Creates: ./example.com-ai-enhanced/
+
+# AI + Clean mirroring
+mirror-web-cli https://complex-app.com --ai --clean
+# → Creates: ./complex-app.com-ai-enhanced/
+```
+
+#### **Error Handling (No API Key)**
+
+```bash
+# If you try AI features without API key setup:
+mirror-web-cli https://example.com --ai
+
+# You'll see:
+# ⚠️ AI features requested but no OPENAI_API_KEY found
+# Add OPENAI_API_KEY to your environment...
+# Continuing without AI features...
 ```
 
 #### 📁 Auto-Differentiated Output Directories

@@ -22,9 +22,32 @@ Mirror Web CLI v1.1.3 is a **professional website mirroring tool** with intellig
 
 ## Common Commands
 
+### For npm Package Users (Global Installation)
+
 ```bash
-# Run the CLI tool (Production Usage)
+# Install globally from npm registry
+npm install -g mirror-web-cli
+
+# Use the CLI tool (Production Usage)
+mirror-web-cli <url> [options]
+
+# Check version
+mirror-web-cli --version
+
+# Get help
+mirror-web-cli --help
+
+# One-time usage without installation
+npx mirror-web-cli <url> [options]
+```
+
+### For Development/Source Users
+
+```bash
+# Run from source (Development Usage)
 npm start <url> [options]
+# or
+node src/cli.js <url> [options]
 
 # Quick testing and validation
 npm test
@@ -46,6 +69,12 @@ npm run demo
 
 ### Complete CLI Syntax
 
+**For npm package users:**
+```bash
+mirror-web-cli <url> [options]
+```
+
+**For development/source users:**
 ```bash
 node src/cli.js <url> [options]
 ```
@@ -73,64 +102,162 @@ Mirror Web CLI automatically differentiates output directories based on whether 
 
 This allows you to easily compare standard vs AI-enhanced outputs and organize your projects.
 
+## NPM Package Usage & API Key Requirements
+
+### Installation Methods
+
+The Mirror Web CLI is available as an npm package and can be installed/used in multiple ways:
+
+#### **Global Installation (Recommended for Regular Use)**
+```bash
+# Install once globally
+npm install -g mirror-web-cli
+
+# Use anywhere
+mirror-web-cli https://example.com
+```
+
+#### **One-time Usage (No Installation)**
+```bash
+# Run directly without installing
+npx mirror-web-cli https://example.com
+```
+
+#### **Development Installation**
+```bash
+# For customization/development
+git clone https://github.com/SanjeevSaniel/mirror-web-cli.git
+cd mirror-web-cli
+npm install
+node src/cli.js https://example.com
+```
+
+### API Key Requirements (CRITICAL)
+
+**🚨 IMPORTANT**: The npm package does NOT include pre-configured API keys. Users MUST set up their own OpenAI API key in their terminal environment.
+
+#### **How API Key Enforcement Works:**
+
+1. **Basic Features**: Work immediately after installation (no API key needed)
+2. **AI Features**: Require user to set `OPENAI_API_KEY` environment variable
+3. **Validation**: Tool validates API key format (`sk-` prefix required)
+4. **Fallback**: If AI requested but no key found, continues with basic functionality + warning
+
+#### **User Setup Process:**
+
+**Windows PowerShell:**
+```powershell
+# Set API key in terminal
+$env:OPENAI_API_KEY="sk-your-key-here"
+
+# Verify setup
+echo $env:OPENAI_API_KEY
+
+# Use AI features
+mirror-web-cli https://example.com --ai
+```
+
+**macOS/Linux:**
+```bash
+# Set API key in terminal
+export OPENAI_API_KEY="sk-your-key-here"
+
+# Verify setup
+echo $OPENAI_API_KEY
+
+# Use AI features
+mirror-web-cli https://example.com --ai
+```
+
+#### **Error Messages Users See:**
+
+```bash
+# Without API key setup:
+mirror-web-cli https://example.com --ai
+
+# Output:
+# ⚠️  AI features requested but no OPENAI_API_KEY found
+# Add OPENAI_API_KEY to your environment...
+# Continuing without AI features...
+```
+
+This ensures users understand they need their own OpenAI account and API key.
+
 ### Usage Examples by Category
 
 #### **Basic Mirroring**
 
+**With npm package (global installation):**
 ```bash
 # Simple website mirror (outputs to example.com-standard)
-node src/cli.js https://example.com
+mirror-web-cli https://example.com
 
 # Mirror to specific directory
-node src/cli.js https://company-site.com -o ./company-mirror
+mirror-web-cli https://company-site.com -o ./company-mirror
 
 # Mirror with debug logging (outputs to portfolio.dev-standard)
-node src/cli.js https://portfolio.dev --debug
+mirror-web-cli https://portfolio.dev --debug
+```
+
+**With npx (one-time usage):**
+```bash
+# Simple website mirror without installation
+npx mirror-web-cli https://example.com
+```
+
+**Development/Source usage:**
+```bash
+# From source code
+node src/cli.js https://example.com
 ```
 
 #### **Clean Mirroring (Recommended)**
 
+**With npm package:**
 ```bash
 # Remove tracking scripts and analytics (outputs to blog-site.com-standard)
-node src/cli.js https://blog-site.com --clean
+mirror-web-cli https://blog-site.com --clean
 
 # Clean mirror with custom output
-node src/cli.js https://news-site.com --clean -o ./news-clean
+mirror-web-cli https://news-site.com --clean -o ./news-clean
 
 # Clean mirror with debug info (outputs to e-commerce.com-standard)
-node src/cli.js https://e-commerce.com --clean --debug
+mirror-web-cli https://e-commerce.com --clean --debug
 ```
 
 #### **AI-Enhanced Mirroring**
 
-**Windows PowerShell:**
+**Windows PowerShell (npm package):**
 
 ```powershell
 # Set OpenAI API key first
 $env:OPENAI_API_KEY="sk-your-api-key-here"
 
 # AI analysis for optimal conversion (outputs to react-app.com-ai-enhanced)
-node src/cli.js https://react-app.com --ai
+mirror-web-cli https://react-app.com --ai
 ```
 
-**macOS/Linux (Bash/Zsh):**
+**macOS/Linux (npm package):**
 
 ```bash
 # Set OpenAI API key first
 export OPENAI_API_KEY="sk-your-api-key-here"
 
 # AI analysis for optimal conversion (outputs to react-app.com-ai-enhanced)
-node src/cli.js https://react-app.com --ai
+mirror-web-cli https://react-app.com --ai
 ```
 
-**Cross-platform examples:**
+**Cross-platform examples (npm package):**
 
 ```bash
 # AI + clean + custom output
-node src/cli.js https://vue-app.dev --ai --clean -o ./ai-optimized
+mirror-web-cli https://vue-app.dev --ai --clean -o ./ai-optimized
 
 # AI with debugging (outputs to complex-spa.com-ai-enhanced)
-node src/cli.js https://complex-spa.com --ai --debug
+mirror-web-cli https://complex-spa.com --ai --debug
+
+# One-time usage with npx
+npx mirror-web-cli https://complex-spa.com --ai --debug
 ```
 
 #### **Framework-Specific Examples**
