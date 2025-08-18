@@ -1,6 +1,6 @@
-# 🪞 Mirror Web CLI v1.0
+# 🪞 Mirror Web CLI v1.1.3
 
-## Professional Website Mirroring with Intelligent Framework Preservation
+## Professional Website Mirroring with Intelligent Framework Preservation & Enhanced Asset Processing
 
 A powerful, universal website mirroring tool that intelligently detects and preserves framework structures while creating offline-ready websites. Works seamlessly with React, Next.js, Vue, Angular, Svelte, WordPress, and static sites.
 
@@ -39,14 +39,27 @@ A powerful, universal website mirroring tool that intelligently detects and pres
 - **Easy comparison**: Side-by-side analysis of different approaches
 - **Organized workflow**: Never overwrite previous results
 
-## 🛠️ Recent Improvements
+## 🛠️ Recent Improvements (v1.1.3)
 
-✅ **Enhanced Next.js/React Support**
+✅ **Enhanced Environment Variable System**
 
-- Fixed hydration mismatch errors causing "Application error" messages
-- Improved script preload handling for missing chunks
-- Enhanced JavaScript content rewriting for better offline compatibility
-- Robust error boundaries for graceful degradation
+- Priority-based .env loading with shell environment preservation
+- Improved OpenAI API key handling with multiple configuration sources
+- Better development workflow with .env.local support
+
+✅ **Next.js Image Optimizer Support**
+
+- Robust handling of `/_next/image` endpoints with HTTP 402 avoidance
+- Original image extraction from optimizer URLs
+- Runtime asset rewriting with DOM mutation observer
+- Enhanced offline compatibility for Next.js applications
+
+✅ **Advanced Asset Processing**
+
+- Microlink integration for screenshot services
+- Comprehensive hover/popover content capture
+- Responsive image support with `srcset` rewriting
+- Enhanced video and audio processing with extended timeouts
 
 ✅ **Smart Output Organization**
 
@@ -407,7 +420,7 @@ mirror-web-cli https://video-heavy-site.com --timeout 180000
 
 ```Plaintext
 ════════════════════════════════════════════════════════════════════════════════
-                        🪞 Mirror Web CLI v1.0
+                      🪞 Mirror Web CLI v1.1.3
                      Professional Website Mirroring
 ════════════════════════════════════════════════════════════════════════════════
 
