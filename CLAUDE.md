@@ -41,6 +41,7 @@ npm run demo
 ## CLI Syntax & Usage Patterns
 
 ### Complete CLI Syntax
+
 ```bash
 node src/cli.js <url> [options]
 ```
@@ -71,6 +72,7 @@ This allows you to easily compare standard vs AI-enhanced outputs and organize y
 ### Usage Examples by Category
 
 #### **Basic Mirroring**
+
 ```bash
 # Simple website mirror (outputs to example.com-standard)
 node src/cli.js https://example.com
@@ -83,6 +85,7 @@ node src/cli.js https://portfolio.dev --debug
 ```
 
 #### **Clean Mirroring (Recommended)**
+
 ```bash
 # Remove tracking scripts and analytics (outputs to blog-site.com-standard)
 node src/cli.js https://blog-site.com --clean
@@ -97,6 +100,7 @@ node src/cli.js https://e-commerce.com --clean --debug
 #### **AI-Enhanced Mirroring**
 
 **Windows PowerShell:**
+
 ```powershell
 # Set OpenAI API key first
 $env:OPENAI_API_KEY="sk-your-api-key-here"
@@ -106,6 +110,7 @@ node src/cli.js https://react-app.com --ai
 ```
 
 **macOS/Linux (Bash/Zsh):**
+
 ```bash
 # Set OpenAI API key first
 export OPENAI_API_KEY="sk-your-api-key-here"
@@ -115,6 +120,7 @@ node src/cli.js https://react-app.com --ai
 ```
 
 **Cross-platform examples:**
+
 ```bash
 # AI + clean + custom output
 node src/cli.js https://vue-app.dev --ai --clean -o ./ai-optimized
@@ -124,6 +130,7 @@ node src/cli.js https://complex-spa.com --ai --debug
 ```
 
 #### **Framework-Specific Examples**
+
 ```bash
 # React applications
 node src/cli.js https://react-site.com --clean
@@ -142,6 +149,7 @@ node src/cli.js https://jquery-site.com --clean
 ```
 
 #### **Complex Sites & Media**
+
 ```bash
 # Video-rich websites (extended timeout)
 node src/cli.js https://code.visualstudio.com --clean --timeout 300000
@@ -154,6 +162,7 @@ node src/cli.js https://photographer.com --clean -o ./portfolio
 ```
 
 #### **Production & Development**
+
 ```bash
 # Production mirroring
 npm start https://production-site.com --clean
@@ -251,6 +260,7 @@ The Mirror Web CLI includes **optional AI-powered analysis** using OpenAI's GPT-
 ### When to Use AI Features
 
 #### **Use AI When:**
+
 - Complex SPA applications with intricate state management
 - Unusual or custom framework implementations
 - Sites with complex asset dependencies
@@ -258,6 +268,7 @@ The Mirror Web CLI includes **optional AI-powered analysis** using OpenAI's GPT-
 - Working with experimental frameworks
 
 #### **Skip AI For:**
+
 - Simple static websites
 - Standard React/Vue/Angular applications
 - Quick testing and prototyping
@@ -267,11 +278,13 @@ The Mirror Web CLI includes **optional AI-powered analysis** using OpenAI's GPT-
 ### Environment Setup
 
 **Step 1: Get OpenAI API Key**
+
 1. Visit [OpenAI API](https://platform.openai.com/api-keys)
 2. Create an account and generate an API key
 3. Add billing information (usage-based pricing)
 
 **Step 2: Set Environment Variable**
+
 ```bash
 # Linux/macOS
 export OPENAI_API_KEY="sk-your-api-key-here"
