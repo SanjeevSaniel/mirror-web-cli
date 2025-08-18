@@ -11,7 +11,20 @@
       "Bash(npm pack:*)",
       "Bash(git add:*)",
       "Bash(pkill:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(npm info:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh repo edit:*)",
+      "Bash(gh release:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run rerun:*)",
+      "Bash(gh run view:*)",
+      "Bash(npm version:*)",
+      "Bash(git commit:*)"
     ],
     "additionalDirectories": [
       "D:\\d\\1A-Personal\\D-Learnings\\1-Projects"
