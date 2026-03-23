@@ -128,6 +128,16 @@ program
     false,
   )
   .option(
+    '--block-ads',
+    'Block advertisements using adblocker plugin',
+    false,
+  )
+  .option(
+    '--block-cookies',
+    'Automatically remove and block cookie consent banners',
+    false,
+  )
+  .option(
     '--ai',
     'Enable AI-powered website analysis (reads OPENAI_API_KEY or GEMINI_API_KEY from env)',
     false,
@@ -162,6 +172,8 @@ program
       const config = {
         outputDir: options.output,
         clean: options.clean,
+        blockAds: options.blockAds,
+        blockCookies: options.blockCookies,
         ai: aiEnabled,
         aiModel: options.aiModel,
         debug: options.debug,

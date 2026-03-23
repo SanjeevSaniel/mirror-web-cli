@@ -569,6 +569,9 @@ export class MirrorCloner {
       timeout: this.options.timeout,
     });
 
+    // Handle cookie consent banners before further processing
+    await this.browserEngine.handleCookieConsent(page);
+
     await this.waitForRootReady(page);
     await this.scrollToBottomAndLoad(page);
     await this.waitForImagesSettled(page, 8000);

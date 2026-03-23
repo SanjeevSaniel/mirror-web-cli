@@ -376,7 +376,10 @@ Arguments:
 Options:
   -o, --output <dir>      Custom output directory (default: domain name)
   --clean                 Remove tracking scripts and analytics
+  --block-ads             Block advertisements using adblocker plugin
+  --block-cookies         Automatically remove and block cookie consent banners
   --ai                    Enable AI-powered analysis (requires OpenAI API key)
+  --ai-model <model>      AI model to use (default: gemini-3-flash-preview)
   --openai-key <key>      OpenAI API key for AI features (or set OPENAI_API_KEY env var)
   --debug                 Enable detailed debug logging
   --timeout <ms>          Page load timeout in milliseconds (default: 120000)
