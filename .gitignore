@@ -34,3 +34,4 @@ build/
 # Optional: lock files (if you want to avoid committing them)
 # package-lock.json
 # yarn.lock
+bun.lock

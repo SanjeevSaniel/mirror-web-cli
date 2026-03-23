@@ -60,7 +60,7 @@ export class MirrorCloner {
     this.logger = new Logger(this.options);
 
     // Optional AI
-    this.aiAnalyzer = this.options.ai ? new AIAnalyzer() : null;
+    this.aiAnalyzer = this.options.ai ? new AIAnalyzer(this.options.aiModel) : null;
 
     // Data
     this.$ = null; // Cheerio DOM instance

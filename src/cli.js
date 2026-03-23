@@ -48,25 +48,39 @@ function loadEnvWithPriority() {
 loadEnvWithPriority();
 
 /**
- * Validate and configure OpenAI API key for AI features.
- * Uses OPENAI_API_KEY from environment (shell, .env.local, .env) or --openai-key if provided.
+ * Validate and configure AI API key for AI features.
+ * Priority: 
+ * 1. CLI flag (--openai-key)
+ * 2. GEMINI_API_KEY (if model is gemini-*)
+ * 3. OPENAI_API_KEY
  */
-function validateAISetup(aiEnabled, openaiApiKey) {
+function validateAISetup(aiEnabled, openaiApiKey, aiModel) {
   if (!aiEnabled) return false;
 
-  // CLI flag has highest priority
-  const finalApiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+  const isGemini = aiModel.toLowerCase().includes('gemini');
+  
+  // CLI flag has highest priority (for OpenAI)
+  let finalApiKey = openaiApiKey;
+  
+  if (!finalApiKey) {
+    if (isGemini) {
+      finalApiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    } else {
+      finalApiKey = process.env.OPENAI_API_KEY;
+    }
+  }
 
   if (!finalApiKey) {
+    const keyName = isGemini ? 'GEMINI_API_KEY or OPENAI_API_KEY' : 'OPENAI_API_KEY';
     console.log('');
     console.log(
       chalk.yellow(
-        '⚠️  AI features requested but no OPENAI_API_KEY found (checked env, .env.local, and .env).',
+        `⚠️  AI features requested but no ${keyName} found (checked env, .env.local, and .env).`,
       ),
     );
     console.log(
       chalk.white(
-        'Add OPENAI_API_KEY to your .env.local or .env file, export it in your shell, or pass --openai-key "sk-..."',
+        'Add the API key to your .env.local or .env file, export it in your shell, or pass --openai-key "sk-..."',
       ),
     );
     console.log(chalk.dim('Continuing without AI features...'));
@@ -74,7 +88,8 @@ function validateAISetup(aiEnabled, openaiApiKey) {
     return false;
   }
 
-  if (!finalApiKey.startsWith('sk-')) {
+  // Basic format check (OpenAI starts with sk-, Gemini often doesn't but we'll be flexible)
+  if (!isGemini && !finalApiKey.startsWith('sk-')) {
     console.log('');
     console.log(
       chalk.yellow('⚠️  Invalid OpenAI API key format (must start with "sk-")'),
@@ -84,9 +99,11 @@ function validateAISetup(aiEnabled, openaiApiKey) {
     return false;
   }
 
-  // If provided via flag, ensure it’s in process.env for downstream code
+  // Ensure key is in process.env for downstream code if provided via flag or specific var
   if (openaiApiKey) {
     process.env.OPENAI_API_KEY = openaiApiKey;
+  } else if (isGemini && process.env.GEMINI_API_KEY) {
+    // Already in env
   }
 
   return true;
@@ -112,12 +129,17 @@ program
   )
   .option(
     '--ai',
-    'Enable AI-powered website analysis (reads OPENAI_API_KEY from env, .env.local, or .env)',
+    'Enable AI-powered website analysis (reads OPENAI_API_KEY or GEMINI_API_KEY from env)',
     false,
   )
   .option(
+    '--ai-model <model>',
+    'AI model to use for analysis',
+    'gemini-3-flash-preview',
+  )
+  .option(
     '--openai-key <key>',
-    'OpenAI API key for AI features (overrides env/.env.local/.env for this run)',
+    'OpenAI API key for AI features (overrides env for this run)',
   )
   .option('--debug', 'Enable detailed debug logging and error traces', false)
   .option(
@@ -135,12 +157,13 @@ program
       if (!url.startsWith('http')) url = 'https://' + url;
       new URL(url); // validate
 
-      const aiEnabled = validateAISetup(options.ai, options.openaiKey);
+      const aiEnabled = validateAISetup(options.ai, options.openaiKey, options.aiModel);
 
       const config = {
         outputDir: options.output,
         clean: options.clean,
         ai: aiEnabled,
+        aiModel: options.aiModel,
         debug: options.debug,
         timeout: parseInt(options.timeout),
         headless: options.headless !== 'false',
