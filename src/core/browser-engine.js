@@ -208,9 +208,24 @@ export class BrowserEngine {
           if (!text || text.length > 50) continue; // Skip empty or too long text (unlikely to be a simple button)
 
           const lowerText = text.toLowerCase();
-          if (acceptButtonTexts.some(t => lowerText.includes(t.toLowerCase()))) {
+          const isMatch = acceptButtonTexts.some(t => lowerText.includes(t.toLowerCase()));
+
+          if (isMatch) {
             try {
+              // Safety: If it's a link with an href, it might navigate.
+              // We prefer clicking buttons or elements that don't look like external links.
+              const isLinkWithHref = btn.tagName === 'A' && btn.getAttribute('href') && !btn.getAttribute('href').startsWith('#');
+              const isStrongAccept = /accept all|allow all|agree to all|accept and continue/i.test(lowerText);
+
+              // If it's a link that navigates, only click if it's a VERY strong "Accept All" signal.
+              // Otherwise, we might be clicking a "Cookie Policy" link by mistake.
+              if (isLinkWithHref && !isStrongAccept) {
+                continue;
+              }
+
               btn.click();
+              // One click is often enough for most banners; let's break if we found a strong match
+              if (isStrongAccept) break;
             } catch (e) { }
           }
         }
