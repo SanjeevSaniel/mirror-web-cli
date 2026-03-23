@@ -203,12 +203,13 @@ export class MirrorCloner {
       await this.assetManager.extractAllAssets();
 
       // Step 7: AI-powered analysis (optional)
+      const aiModelName = this.aiAnalyzer?.aiModel || 'GPT-4o';
       this.display.step(
         6,
         9,
         'AI Analysis',
         this.options.ai
-          ? 'Using OpenAI GPT-4o for insights...'
+          ? `Using ${aiModelName} for insights...`
           : 'Skipping AI analysis...',
       );
       if (this.options.ai && this.aiAnalyzer?.isEnabled) {
