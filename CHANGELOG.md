@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Breaking Changes
+- **Default AI Model Changed**: The default AI model has been switched from `gpt-4o` to `gemini-3-flash-preview` to make the CLI more accessible out of the box (Google provides a free tier for Gemini API keys). If you previously relied on the default `gpt-4o` and only had an `OPENAI_API_KEY` set, you may need to pass `--ai-model gpt-4o` explicitly.
+
+### Changed
+- Improved `handleCookieConsent()` precision to avoid accidentally hiding non-banner layout elements.
+- Fixed an issue where the Adblocker plugin would register multiples times during `BrowserEngine` initialization.
+
 ## 1.0.2 - 2025-08-18
 
 ### Added

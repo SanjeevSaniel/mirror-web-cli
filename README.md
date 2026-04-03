@@ -104,15 +104,14 @@ npm install
 node src/cli.js https://example.com
 ```
 
-### OpenAI API Key Setup (Required for AI Features)
+### API Key Setup (Required for AI Features)
 
-**🚨 IMPORTANT**: Users must set up their OpenAI API key in their terminal environment before using AI features. The package does NOT include pre-configured API keys.
+**🚨 IMPORTANT**: Users must set up an API key (Gemini or OpenAI) in their terminal environment before using AI features. The tool defaults to `gemini-3-flash-preview` as Google provides free API keys, making it more accessible.
 
-#### **Step 1: Get OpenAI API Key**
+#### **Step 1: Get an API Key**
 
-1. Visit [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Create account and generate API key
-3. Copy your API key (starts with `sk-`)
+- **Gemini (Default)**: Get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+- **OpenAI (Alternative)**: Get a key from [OpenAI Platform](https://platform.openai.com/api-keys)
 
 #### **Step 2: Set Environment Variable (REQUIRED)**
 
@@ -120,44 +119,40 @@ node src/cli.js https://example.com
 
 ```powershell
 # Temporary (current session only)
-$env:OPENAI_API_KEY="sk-your-api-key-here"
+$env:GEMINI_API_KEY="AIzaSy..."
+# Or if using OpenAI:
+$env:OPENAI_API_KEY="sk-..."
 
 # Permanent (recommended)
-[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-api-key-here', 'User')
-
-# Verify setup
-echo $env:OPENAI_API_KEY
+[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'AIzaSy...', 'User')
 ```
 
 **Windows Command Prompt:**
 
 ```cmd
 # Temporary (current session only)
-set OPENAI_API_KEY=sk-your-api-key-here
-
-# Verify setup
-echo %OPENAI_API_KEY%
+set GEMINI_API_KEY=AIzaSy...
 ```
 
 **macOS/Linux (Bash/Zsh):**
 
 ```bash
 # Temporary (current session only)
-export OPENAI_API_KEY="sk-your-api-key-here"
+export GEMINI_API_KEY="AIzaSy..."
 
 # Permanent (add to ~/.bashrc or ~/.zshrc)
-echo 'export OPENAI_API_KEY="sk-your-api-key-here"' >> ~/.bashrc
+echo 'export GEMINI_API_KEY="AIzaSy..."' >> ~/.bashrc
 source ~/.bashrc
-
-# Verify setup
-echo $OPENAI_API_KEY
 ```
 
 #### **Alternative: Command Line Parameter**
 
 ```bash
 # Pass API key directly (not recommended for security)
-mirror-web-cli https://example.com --ai --openai-key "sk-your-key-here"
+# If using Gemini (default)
+mirror-web-cli https://example.com --ai --openai-key "AIzaSy..." 
+# If using OpenAI
+mirror-web-cli https://example.com --ai --ai-model gpt-4o --openai-key "sk-..."
 ```
 
 #### **Step 3: Verify Setup**
@@ -172,9 +167,9 @@ mirror-web-cli https://example.com --ai --debug
 
 **Requirements:**
 
-- ✅ **OpenAI API keys only** (must start with `sk-`)
-- ✅ **GPT-4o model** for intelligent analysis  
-- ✅ **Active OpenAI account** with billing setup
+- ✅ **Gemini AI API Key** (`AIzaSy...`) or **OpenAI API Key** (`sk-...`)
+- ✅ **gemini-3-flash-preview** (Default model) or **GPT-4o**
+- ✅ **Active account** with API access
 - ✅ **Terminal environment setup** (no pre-configured keys)
 
 ### Basic Usage (After Installation)
@@ -203,16 +198,17 @@ mirror-web-cli https://complex-site.com --debug
 
 ```bash
 # FIRST: Set up API key (see above section)
-export OPENAI_API_KEY="sk-your-api-key-here"  # Linux/macOS
+export GEMINI_API_KEY="AIzaSy..."  # Linux/macOS
 # or
-$env:OPENAI_API_KEY="sk-your-api-key-here"    # Windows PowerShell
+$env:GEMINI_API_KEY="AIzaSy..."    # Windows PowerShell
 
-# THEN: Use AI features
+# THEN: Use AI features (defaults to gemini-3-flash-preview)
 mirror-web-cli https://example.com --ai
 # → Creates: ./example.com-ai-enhanced/
 
-# AI + Clean mirroring
-mirror-web-cli https://complex-app.com --ai --clean
+# AI + Clean mirroring with OpenAI explicitly:
+export OPENAI_API_KEY="sk-..."
+mirror-web-cli https://complex-app.com --ai --ai-model gpt-4o --clean
 # → Creates: ./complex-app.com-ai-enhanced/
 ```
 
@@ -223,8 +219,8 @@ mirror-web-cli https://complex-app.com --ai --clean
 mirror-web-cli https://example.com --ai
 
 # You'll see:
-# ⚠️ AI features requested but no OPENAI_API_KEY found
-# Add OPENAI_API_KEY to your environment...
+# ⚠️ AI analysis API key not found. AI analysis will be disabled.
+# Set GEMINI_API_KEY environment variable to enable AI features...
 # Continuing without AI features...
 ```
 
@@ -388,14 +384,13 @@ Options:
   -V, --version           Show version number
 ```
 
-### OpenAI API Key Priority
+### API Key Priority
 
-The tool checks for OpenAI API keys in this order:
+The tool checks for API keys in this order:
 
-1. `--openai-key` command line parameter
-2. `OPENAI_API_KEY` environment variable
+1. `--openai-key` command line parameter (handles both Gemini and OpenAI keys)
+2. `GEMINI_API_KEY` (if default Gemini model is used) or `OPENAI_API_KEY` environment variable
 3. If neither is found, AI features are disabled with a helpful message
-4. Keys must start with `sk-` (validated automatically)
 
 ## 🏗️ Framework Support
 
@@ -446,24 +441,24 @@ mirror-web-cli https://shop.example.com --debug --clean
 # → Creates: ./shop.example.com-standard/ with detailed logging, removes analytics
 ```
 
-### AI-Powered Analysis (OpenAI)
+### AI-Powered Analysis (Gemini/OpenAI)
 
 **Windows PowerShell:**
 
 ```powershell
 # Set environment variable first
-$env:OPENAI_API_KEY="sk-proj-your-openai-key-here"
+$env:GEMINI_API_KEY="AIzaSy..."
 mirror-web-cli https://complex-app.com --ai --clean
-# → Creates: ./complex-app.com-ai-enhanced/ with OpenAI GPT-4o framework analysis
+# → Creates: ./complex-app.com-ai-enhanced/ with AI framework analysis
 ```
 
 **macOS/Linux:**
 
 ```bash
 # Set environment variable first
-export OPENAI_API_KEY="sk-proj-your-openai-key-here"
+export GEMINI_API_KEY="AIzaSy..."
 mirror-web-cli https://complex-app.com --ai --clean
-# → Creates: ./complex-app.com-ai-enhanced/ with OpenAI GPT-4o framework analysis
+# → Creates: ./complex-app.com-ai-enhanced/ with AI framework analysis
 ```
 
 **Cross-platform (using CLI parameter):**

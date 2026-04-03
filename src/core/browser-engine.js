@@ -2,6 +2,8 @@ import puppeteer from 'puppeteer-extra';
 import AdblockerPlugin from 'puppeteer-extra-plugin-adblocker';
 import chalk from 'chalk';
 
+let isAdblockerRegistered = false;
+
 /**
  * Browser Engine - Handles browser automation
  */
@@ -19,8 +21,9 @@ export class BrowserEngine {
     this.page = null;
 
     // Use adblocker plugin if enabled
-    if (this.options.blockAds) {
+    if (this.options.blockAds && !isAdblockerRegistered) {
       puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
+      isAdblockerRegistered = true;
     }
   }
 
@@ -193,7 +196,7 @@ export class BrowserEngine {
             document.querySelectorAll(selector).forEach(el => {
               // Only remove if it looks like a popup (likely fixed or absolute)
               const style = window.getComputedStyle(el);
-              if (style.position === 'fixed' || style.position === 'absolute' || el.tagName === 'DIV') {
+              if (style.position === 'fixed' || style.position === 'absolute') {
                 el.style.display = 'none';
                 el.setAttribute('aria-hidden', 'true');
               }
