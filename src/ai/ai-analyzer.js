@@ -9,35 +9,52 @@ dotenv.config();
  * AI-Powered Website Analysis using OpenAI GPT-4o
  */
 export class AIAnalyzer {
-  constructor() {
+  constructor(aiModel = 'gpt-4o') {
     this.openai = null;
     this.isEnabled = false;
+    this.aiModel = aiModel;
     this.initializeOpenAI();
   }
 
   initializeOpenAI() {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const isGemini = this.aiModel.toLowerCase().includes('gemini');
+    let apiKey = isGemini ? process.env.GEMINI_API_KEY : process.env.OPENAI_API_KEY;
+
+    // Fallback if specific key is missing
+    if (!apiKey) {
+      apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
+    }
 
     if (!apiKey) {
+      const keyName = isGemini ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
       console.log(
         chalk.yellow(
-          '⚠️ OpenAI API key not found. AI analysis will be disabled.',
+          `⚠️ AI analysis API key not found. AI analysis will be disabled.`,
         ),
       );
       console.log(
         chalk.gray(
-          '   Set OPENAI_API_KEY environment variable to enable AI features.',
+          `   Set ${keyName} environment variable to enable AI features.`,
         ),
       );
       return;
     }
 
     try {
-      this.openai = new OpenAI({ apiKey });
+      const config = { apiKey };
+      
+      // Use Gemini OpenAI-compatible endpoint if model is gemini or GEMINI_API_KEY is used
+      if (isGemini || process.env.GEMINI_API_KEY === apiKey) {
+        config.baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
+        console.log(chalk.green(`✅ AI analysis enabled with Gemini model: ${this.aiModel}`));
+      } else {
+        console.log(chalk.green(`✅ AI analysis enabled with OpenAI model: ${this.aiModel}`));
+      }
+
+      this.openai = new OpenAI(config);
       this.isEnabled = true;
-      console.log(chalk.green('✅ AI analysis enabled with OpenAI GPT-4o'));
     } catch (error) {
-      console.log(chalk.red('❌ Failed to initialize OpenAI:'), error.message);
+      console.log(chalk.red('❌ Failed to initialize AI client:'), error.message);
     }
   }
 
@@ -72,7 +89,7 @@ export class AIAnalyzer {
     );
 
     const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: this.aiModel,
       messages: [
         {
           role: 'system',
@@ -225,7 +242,7 @@ Provide actionable optimization steps in JSON format:
 }`;
 
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: this.aiModel,
         messages: [
           {
             role: 'system',

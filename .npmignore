@@ -64,3 +64,5 @@ build/
 # Temporary folders
 tmp/
 temp/
+
+bun.lock

@@ -682,131 +682,92 @@ export class FrameworkWriter {
 
   async downloadAssetsWithExactNames() {
     const axios = (await import('axios')).default;
+    const CONCURRENCY = 8;
 
-    // Images
-    if (this.cloner.assets.images.length) {
+    const downloadTask = async (task, current, total, type) => {
+      const { url, dest, buffer, headers } = task;
+      const pct = Math.round((current / total) * 100);
+      const label = path.basename(dest);
+      
       if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(
-            `    Downloading ${this.cloner.assets.images.length} images...`,
-          ),
-        );
+        process.stdout.write(chalk.gray(`    [${current}/${total}] ${pct}% Downloading ${type}: ${label}...\r`));
       }
-      for (const img of this.cloner.assets.images) {
-        if (img.url && img.url.includes('/_next/image')) continue; // skip optimizer endpoints
 
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'images',
-          img.filename,
-        );
+      try {
         await fs.ensureDir(path.dirname(dest));
-
-        if (img.buffer) {
-          await fs.writeFile(dest, img.buffer);
-          continue;
+        if (buffer) {
+          await fs.writeFile(dest, buffer);
+          return true;
         }
 
-        const tryUrls = [];
-        if (img.url) tryUrls.push(img.url);
-        if (img.nextJsUrl) tryUrls.push(this.cloner.resolveUrl(img.nextJsUrl));
+        const res = await axios.get(url, {
+          responseType: 'arraybuffer',
+          timeout: 60000,
+          headers: headers || { 'User-Agent': 'Mozilla/5.0' },
+          validateStatus: () => true,
+        });
 
-        let saved = false;
-        for (const u of tryUrls) {
-          try {
-            const res = await axios.get(u, {
-              responseType: 'arraybuffer',
-              timeout: 60000,
-              headers: {
-                'User-Agent': 'Mozilla/5.0',
-                Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-                Referer: this.cloner.url,
-              },
-              validateStatus: () => true,
-            });
-
-            const status = res.status || 0;
-            const ctype = String(
-              res.headers?.['content-type'] || '',
-            ).toLowerCase();
-
-            // Follow Microlink JSON if necessary
-            if (
-              /microlink\.io/i.test(u) &&
-              ctype.includes('application/json')
-            ) {
-              try {
-                const j = await axios.get(u, {
-                  responseType: 'json',
-                  timeout: 60000,
-                  headers: { 'User-Agent': 'Mozilla/5.0' },
-                });
-                const target =
-                  j.data?.data?.image?.url ||
-                  j.data?.data?.screenshot?.url ||
-                  j.data?.data?.thumbnail?.url ||
-                  j.data?.image?.url ||
-                  j.data?.screenshot?.url;
-                if (target) {
-                  const res2 = await axios.get(target, {
-                    responseType: 'arraybuffer',
-                    timeout: 60000,
-                    headers: {
-                      'User-Agent': 'Mozilla/5.0',
-                      Referer: this.cloner.url,
-                      Accept:
-                        'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-                    },
-                    validateStatus: () => true,
-                  });
-                  if ((res2.status || 0) >= 200 && (res2.status || 0) < 300) {
-                    await fs.writeFile(dest, res2.data);
-                    saved = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                this.cloner.logger.warnNonCritical('image', u, e);
-              }
-            }
-
-            if (status >= 200 && status < 300 && res.data?.byteLength > 0) {
-              await fs.writeFile(dest, res.data);
-              saved = true;
-              break;
-            }
-          } catch (e) {
-            this.cloner.logger.warnNonCritical('image', u, e);
-          }
+        if (res.status >= 200 && res.status < 300 && res.data?.byteLength > 0) {
+          await fs.writeFile(dest, res.data);
+          return true;
         }
-        if (!saved) {
-          this.cloner.logger.warnNonCritical(
-            'image',
-            img.url || img.nextJsUrl,
-            new Error('exhausted sources'),
-          );
+        return false;
+      } catch (e) {
+        this.cloner.logger.warnNonCritical(type, url, e);
+        return false;
+      }
+    };
+
+    const runTasks = async (tasks, type) => {
+      if (!tasks.length) return;
+      if (!this.cloner.options.quiet) {
+        console.log(chalk.blue(`  📥 Downloading ${tasks.length} ${type}...`));
+      }
+
+      let current = 0;
+      const results = [];
+      const executing = new Set();
+
+      for (const task of tasks) {
+        const p = Promise.resolve().then(() => downloadTask(task, ++current, tasks.length, type));
+        results.push(p);
+        executing.add(p);
+        p.finally(() => executing.delete(p));
+        if (executing.size >= CONCURRENCY) {
+          await Promise.race(executing);
         }
       }
-    }
+      await Promise.all(results);
+      if (!this.cloner.options.quiet) process.stdout.write('\n');
+    };
 
-    // CSS externals
+    // 1. Images
+    const imageTasks = this.cloner.assets.images
+      .filter(img => img.url && !img.url.includes('/_next/image'))
+      .map(img => ({
+        url: img.url,
+        dest: path.join(this.cloner.options.outputDir, 'assets', 'images', img.filename),
+        buffer: img.buffer,
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          Referer: this.cloner.url,
+        }
+      }));
+    await runTasks(imageTasks, 'images');
+
+    // 2. CSS
     const cssExternals = this.cloner.assets.styles.filter(
       (s) => s.url && s.type === 'external',
     );
     if (cssExternals.length) {
       if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(`    Downloading ${cssExternals.length} CSS files...`),
-        );
+        console.log(chalk.blue(`  📥 Downloading ${cssExternals.length} CSS files...`));
       }
+      let current = 0;
       for (const css of cssExternals) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'css',
-          css.filename,
-        );
+        current++;
+        const dest = path.join(this.cloner.options.outputDir, 'assets', 'css', css.filename);
         try {
           const res = await axios.get(css.url, {
             responseType: 'text',
@@ -814,149 +775,65 @@ export class FrameworkWriter {
             headers: { 'User-Agent': 'Mozilla/5.0' },
           });
           let text = res.data || '';
-          text = await this.rewriteCssUrlsAndDownload(text, css.url, axios, {
-            fromInline: false,
-          });
+          text = await this.rewriteCssUrlsAndDownload(text, css.url, axios, { fromInline: false });
           await fs.ensureDir(path.dirname(dest));
           await fs.writeFile(dest, text, 'utf8');
+          if (!this.cloner.options.quiet) {
+            const pct = Math.round((current / cssExternals.length) * 100);
+            process.stdout.write(chalk.gray(`    [${current}/${cssExternals.length}] ${pct}% Processed CSS: ${css.filename}...\r`));
+          }
         } catch (e) {
           this.cloner.logger.warnNonCritical('styles', css.url, e);
         }
       }
+      if (!this.cloner.options.quiet) process.stdout.write('\n');
     }
 
-    // JS externals: download when JS is enabled (based on decision)
-    const jsExternals = this.cloner.options.disableJs
-      ? []
-      : this.cloner.assets.scripts.filter((s) => s.url);
+    // 3. JS
+    if (!this.cloner.options.disableJs) {
+      const jsTasks = this.cloner.assets.scripts
+        .filter(s => s.url)
+        .map(s => ({
+          url: s.url,
+          dest: path.join(this.cloner.options.outputDir, 'assets', 'js', s.filename),
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        }));
+      await runTasks(jsTasks, 'scripts');
+    }
 
-    if (jsExternals.length) {
-      if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(`    Downloading ${jsExternals.length} JS files...`),
-        );
-      }
-      for (const s of jsExternals) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'js',
-          s.filename,
-        );
-        try {
-          const res = await axios.get(s.url, {
-            responseType: 'text',
-            timeout: 30000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-          });
-          await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data || '', 'utf8');
-        } catch (e) {
-          this.cloner.logger.warnNonCritical('scripts', s.url, e);
+    // 4. Fonts
+    const fontTasks = this.cloner.assets.fonts
+      .filter(f => f.url)
+      .map(f => ({
+        url: f.url,
+        dest: path.join(this.cloner.options.outputDir, 'assets', 'fonts', f.filename),
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      }));
+    await runTasks(fontTasks, 'fonts');
+
+    // 5. Icons
+    const iconTasks = this.cloner.assets.icons
+      .filter(i => i.url)
+      .map(i => ({
+        url: i.url,
+        dest: path.join(this.cloner.options.outputDir, 'assets', 'icons', i.filename),
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      }));
+    await runTasks(iconTasks, 'icons');
+
+    // 6. Media
+    const mediaTasks = this.cloner.assets.media
+      .filter(m => m.url)
+      .map(m => ({
+        url: m.url,
+        dest: path.join(this.cloner.options.outputDir, 'assets', 'media', m.filename),
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Accept: 'video/*;q=0.9,audio/*;q=0.9,*/*;q=0.5',
+          Referer: this.cloner.url,
         }
-      }
-    }
-
-    // Fonts
-    if (this.cloner.assets.fonts.length) {
-      if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(
-            `    Downloading ${this.cloner.assets.fonts.length} fonts...`,
-          ),
-        );
-      }
-      for (const f of this.cloner.assets.fonts) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'fonts',
-          f.filename,
-        );
-        if (!f.url) continue;
-        try {
-          const res = await axios.get(f.url, {
-            responseType: 'arraybuffer',
-            timeout: 30000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-          });
-          await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data);
-        } catch (e) {
-          this.cloner.logger.warnNonCritical('fonts', f.url, e);
-        }
-      }
-    }
-
-    // Icons
-    if (this.cloner.assets.icons.length) {
-      if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(
-            `    Downloading ${this.cloner.assets.icons.length} icons...`,
-          ),
-        );
-      }
-      for (const i of this.cloner.assets.icons) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'icons',
-          i.filename,
-        );
-        if (!i.url) continue;
-        try {
-          const res = await axios.get(i.url, {
-            responseType: 'arraybuffer',
-            timeout: 30000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-          });
-          await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data);
-        } catch (e) {
-          this.cloner.logger.warnNonCritical('icon', i.url, e);
-        }
-      }
-    }
-
-    // Media
-    if (this.cloner.assets.media.length) {
-      if (!this.cloner.options.quiet) {
-        console.log(
-          chalk.gray(
-            `    Downloading ${this.cloner.assets.media.length} media files...`,
-          ),
-        );
-      }
-      for (const media of this.cloner.assets.media) {
-        const dest = path.join(
-          this.cloner.options.outputDir,
-          'assets',
-          'media',
-          media.filename,
-        );
-        if (!media.url) continue;
-        try {
-          const res = await axios.get(media.url, {
-            responseType: 'arraybuffer',
-            timeout: 120000,
-            headers: {
-              'User-Agent': 'Mozilla/5.0',
-              Accept: 'video/*;q=0.9,audio/*;q=0.9,*/*;q=0.5',
-              Referer: this.cloner.url,
-            },
-          });
-          await fs.ensureDir(path.dirname(dest));
-          await fs.writeFile(dest, res.data);
-        } catch (e) {
-          this.cloner.logger.warnNonCritical(
-            media.type || 'media',
-            media.url,
-            e,
-          );
-        }
-      }
-    }
+      }));
+    await runTasks(mediaTasks, 'media');
   }
 
   async rewriteCssUrlsAndDownload(

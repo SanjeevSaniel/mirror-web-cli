@@ -60,7 +60,7 @@ export class MirrorCloner {
     this.logger = new Logger(this.options);
 
     // Optional AI
-    this.aiAnalyzer = this.options.ai ? new AIAnalyzer() : null;
+    this.aiAnalyzer = this.options.ai ? new AIAnalyzer(this.options.aiModel) : null;
 
     // Data
     this.$ = null; // Cheerio DOM instance
@@ -203,12 +203,13 @@ export class MirrorCloner {
       await this.assetManager.extractAllAssets();
 
       // Step 7: AI-powered analysis (optional)
+      const aiModelName = this.aiAnalyzer?.aiModel || 'GPT-4o';
       this.display.step(
         6,
         9,
         'AI Analysis',
         this.options.ai
-          ? 'Using OpenAI GPT-4o for insights...'
+          ? `Using ${aiModelName} for insights...`
           : 'Skipping AI analysis...',
       );
       if (this.options.ai && this.aiAnalyzer?.isEnabled) {
@@ -568,6 +569,39 @@ export class MirrorCloner {
       waitUntil: 'domcontentloaded',
       timeout: this.options.timeout,
     });
+
+    // Capture the baseline URL after potentially initial redirects but BEFORE cookie clicking
+    const baselineUrl = page.url();
+
+    // Handle cookie consent banners before further processing
+    await this.browserEngine.handleCookieConsent(page);
+
+    // Give a small window for any triggered navigation to start
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Post-cookie click safety check: verify if we navigated away from the original intent
+    let currentUrl = page.url();
+    if (currentUrl !== baselineUrl) {
+      // If we navigated to what looks like a cookie settings/privacy page, try to go back
+      const isCookiePage = /cookie|consent|privacy|settings|policy/i.test(currentUrl);
+      const hostChanged = (new URL(currentUrl).hostname !== new URL(baselineUrl).hostname);
+
+      if (isCookiePage || hostChanged) {
+        if (this.options.debug) {
+          console.log(chalk.yellow(`    ⚠️  Cookie consent caused navigation to: ${currentUrl}. Attempting to backtracking to: ${baselineUrl}`));
+        }
+        try {
+          // Go back or re-navigate
+          await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(async () => {
+             await page.goto(baselineUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+          });
+          // Ensure we are back
+          currentUrl = page.url();
+        } catch (e) {
+          if (this.options.debug) console.log(chalk.dim(`      Backtracking failed: ${e.message}`));
+        }
+      }
+    }
 
     await this.waitForRootReady(page);
     await this.scrollToBottomAndLoad(page);
